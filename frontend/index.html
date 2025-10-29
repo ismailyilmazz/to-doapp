@@ -1,13 +1,53 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TASK MANAGER - Dashboard</title>
+    <!-- Font Awesome (for icons) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    
+    <!-- Local CSS: Uses the provided frontend.css -->
+    <link rel="stylesheet" href="frontend.css">
+</head>
+<body>
+    <header class="navbar">
+        <h1 class="title">TASK MANAGER</h1>
+        <nav class="nav-links">
+            <a href="#" class="nav-item active" data-page="home">
+                <i class="fas fa-home"></i>
+            </a>
+            <a href="#" class="nav-item" data-page="tasks">
+                <i class="fas fa-clipboard-list"></i>
+            </a>
+            <a href="#" class="nav-item" data-page="stats">
+                <i class="fas fa-chart-bar"></i>
+            </a>
+            <button class="nav-item button" data-page="logout">
+                <i class="fas fa-sign-out-alt"></i>
+            </button>
+        </nav>
+    </header>
+    
+    <main class="content">
+        <!-- Application content will be dynamically loaded here by frontend.js -->
+    </main>
+
+    <!-- 
+    ================================================
+    REQUIRED JAVASCRIPT LIBRARIES AND APPLICATION LOGIC
+    ================================================
+    -->
+    
+    <!-- 1. Axios: Required for all API calls (Login, Register, CRUD) -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+    <!-- 2. Chart.js: Required for rendering the task statistics graph -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- 3. Your core application logic (frontend.js must be loaded last) -->
+    <!-- CRITICAL FIX: Ensure the path is correct and type="module" is present -->
+    <script src="src/frontend.js" type="module"></script> 
+
+</body>
 </html>
