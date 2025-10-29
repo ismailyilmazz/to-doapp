@@ -11,13 +11,11 @@ router = APIRouter(
     tags=["Auth"]
 )
 
-# --- Utility function to support both MySQL and SQLite ---
+
 def is_connection_alive(conn):
     try:
-        # MySQL connector
         if hasattr(conn, "is_connected"):
             return conn.is_connected()
-        # SQLite fallback
         conn.execute("SELECT 1")
         return True
     except Exception:
@@ -36,7 +34,6 @@ def register_user(user: models.UserCreate):
                 detail="Could not connect to the database."
             )
 
-        # For MySQL, use dictionary=True; for SQLite, skip it
         if hasattr(conn, "cursor"):
             try:
                 cursor = conn.cursor(dictionary=True)
@@ -46,7 +43,7 @@ def register_user(user: models.UserCreate):
             raise HTTPException(status_code=500, detail="Invalid database connection.")
 
         query = "SELECT * FROM users WHERE email = ?"
-        if hasattr(conn, "is_connected"):  # MySQL uses %s
+        if hasattr(conn, "is_connected"):
             query = "SELECT * FROM users WHERE email = %s"
         cursor.execute(query, (user.email,))
         if cursor.fetchone():
@@ -101,7 +98,7 @@ def login_for_access_token(
             raise HTTPException(status_code=500, detail="Invalid database connection.")
 
         query = "SELECT * FROM users WHERE email = ?"
-        if hasattr(conn, "is_connected"):  # MySQL syntax
+        if hasattr(conn, "is_connected"): 
             query = "SELECT * FROM users WHERE email = %s"
         cursor.execute(query, (username,))
         user = cursor.fetchone()
@@ -113,7 +110,6 @@ def login_for_access_token(
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-        # SQLite cursor returns tuple, MySQL returns dict
         if isinstance(user, tuple):
             cols = [col[0] for col in cursor.description]
             user = dict(zip(cols, user))
