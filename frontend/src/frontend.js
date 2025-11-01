@@ -1,11 +1,7 @@
-// NOTE: This file includes the fix for persistent login using localStorage.
 document.addEventListener('DOMContentLoaded', () => {
     const navItems = document.querySelectorAll('.nav-item');
     const mainContent = document.querySelector('.content');
 
-    // ===========================================
-    // API CONFIGURATION AND STATE MANAGEMENT
-    // ===========================================
     const API_BASE_URL = 'http://127.0.0.1:8000/api';
     
     // Attempt to load saved session data on startup
@@ -21,59 +17,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const isSuccess = (status) => status >= 200 && status < 300;
 
-    // ===========================================
-    // UTILITY: JWT VALIDATION CHECK (NEW)
-    // ===========================================
-    
-    /**
-     * Decodes a JWT token and checks if the 'exp' (expiration) claim has passed.
-     * @param {string} token - The JWT string
-     * @returns {boolean} True if the token is valid, False if expired or invalid format.
-     */
-    const isTokenValid = (token) => {
-        if (!token) return false;
-        try {
-            // JWT is base64 encoded, split into header, payload, signature.
-            // Payload is the second part (index 1).
-            const payloadBase64 = token.split('.')[1];
-            if (!payloadBase64) return false;
-
-            // Decode payload (requires padding fix for some base64 implementations)
-            const base64 = payloadBase64.replace(/-/g, '+').replace(/_/g, '/');
-            const payload = JSON.parse(atob(base64));
-
-            // 'exp' is a timestamp in seconds
-            const expirationTimeMs = payload.exp * 1000;
-            
-            // Check if the expiration time is greater than the current time
-            return expirationTimeMs > Date.now();
-
-        } catch (e) {
-            console.error("Failed to decode or validate token:", e);
-            return false;
-        }
-    };
-
-    /**
-     * Checks token on load and forces a logout if expired.
-     */
-    const checkAndClearExpiredToken = () => {
-        if (accessToken && !isTokenValid(accessToken)) {
-            console.warn("Session token expired. Logging out user.");
-            alert("Your session has expired. Please log in again.");
-            logoutUser();
-        }
-    };
-
-
-    // ===========================================
-    // UTILITY: TASK ALERTS (REMAINS THE SAME)
-    // ===========================================
-    
-    /**
-     * Checks if a task is due within the next 24 hours (86,400,000 milliseconds)
-     * and is not already completed.
-     */
     const isDueSoon = (task) => {
         if (task.status === 'completed' || !task.dueDate) {
             return false;
@@ -84,16 +27,38 @@ document.addEventListener('DOMContentLoaded', () => {
         const currentTime = Date.now();
         const difference = dueTime - currentTime;
 
-        // Highlight overdue tasks (difference < 0) or tasks due within 24 hours
         const oneDayInMs = 24 * 60 * 60 * 1000; 
 
         return difference <= oneDayInMs;
     };
 
+    const isTokenValid = (token) => {
+        if (!token) return false;
+        try {
+            const payloadBase64 = token.split('.')[1];
+            if (!payloadBase64) return false;
 
-    // ===========================================
-    // API CALLS: AUTHENTICATION (UPDATED)
-    // ===========================================
+            const base64 = payloadBase64.replace(/-/g, '+').replace(/_/g, '/');
+            const payload = JSON.parse(atob(base64));
+
+            const expirationTimeMs = payload.exp * 1000;
+            
+            return expirationTimeMs > Date.now();
+
+        } catch (e) {
+            console.error("Failed to decode or validate token:", e);
+            return false;
+        }
+    };
+
+    const checkAndClearExpiredToken = () => {
+        if (accessToken && !isTokenValid(accessToken)) {
+            console.warn("Session token expired. Logging out user.");
+            alert("Your session has expired. Please log in again.");
+            logoutUser();
+        }
+    };
+
 
     const registerUser = async (name, email, password) => {
         try {
@@ -124,12 +89,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }]
             });
             
-            // --- PERSISTENCE FIX: Store token and username ---
             accessToken = response.data.access_token;
             currentUsername = email.split('@')[0]; 
             localStorage.setItem('accessToken', accessToken);
             localStorage.setItem('currentUsername', currentUsername);
-            // ------------------------------------------------
 
             return response.data;
 
@@ -140,19 +103,13 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     
     const logoutUser = () => {
-        // --- PERSISTENCE FIX: Clear token and username ---
         accessToken = null;
         currentUsername = 'Guest';
         localStorage.removeItem('accessToken');
         localStorage.removeItem('currentUsername');
-        // ------------------------------------------------
         currentUserId = null;
     };
 
-
-    // ===========================================
-    // API CALLS: TASKS (REMAINS THE SAME)
-    // ===========================================
 
     const fetchTasks = async () => {
         if (!accessToken) throw new Error("User not authenticated.");
@@ -164,18 +121,16 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             console.error("Fetch Tasks Error:", error.response);
             
-            // CRITICAL: If fetch fails with 401, token is definitely bad/expired
             if (error.response && error.response.status === 401) {
                 alert("Session expired or invalid token. Logging out.");
                 logoutUser();
-                await reloadCurrentPage('home'); // Redirect to login
+                await reloadCurrentPage('home'); 
             }
 
             throw error.response?.data?.detail || "Failed to fetch tasks.";
         }
     };
-    
-    // ... (rest of API calls: createTask, updateTask, deleteTask, fetchTaskStats remain the same)
+
     const createTask = async (taskData) => {
         if (!accessToken) throw new Error("User not authenticated.");
         try {
@@ -227,11 +182,6 @@ document.addEventListener('DOMContentLoaded', () => {
             throw error.response?.data?.detail || "Failed to fetch statistics.";
         }
     };
-
-
-    // ===========================================
-    // 1. CONTENT CREATION FUNCTIONS (REMAINS THE SAME)
-    // ===========================================
 
     let cachedTasks = []; 
 
@@ -296,7 +246,6 @@ document.addEventListener('DOMContentLoaded', () => {
             statusText = 'Not Started';
         }
         
-        // --- ALERT FEATURE LOGIC ---
         if (isDueSoon(task)) {
             alertClass = ' alert-card'; 
             color = 'red'; 
@@ -304,7 +253,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             iconHtml = task.icon ? `<i class="fas ${task.icon} card-alert-icon"></i>` : '';
         }
-        // ------------------------------
         
         const dueDateDisplay = task.dueDate || '';
         const timeDisplay = task.dueTime ? task.dueTime.substring(0, 5) : '';
@@ -692,34 +640,38 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let taskChartInstance = null; 
 
-    const formatStatsForChart = (apiStats, groupBy) => {
-        const labels = [];
-        const data = [];
-        const colors = [];
+    const formatStatsForChart = (apiStats) => {
+        const categories = Object.keys(apiStats).sort();
+        const completedData = [];
+        const incompleteData = [];
 
-        if (groupBy === 'category') {
-            for (const category in apiStats) {
-                const count = apiStats[category].completed + apiStats[category].incomplete;
-                labels.push(category);
-                data.push(count);
-                colors.push(getDeterministicColor(category));
-            }
-        } else if (groupBy === 'status') {
-            const overallCounts = { 'completed': 0, 'incomplete': 0 };
-            for (const category in apiStats) {
-                overallCounts.completed += apiStats[category].completed;
-                overallCounts.incomplete += apiStats[category].incomplete;
-            }
-            labels.push('Completed', 'In Progress/Pending');
-            data.push(overallCounts.completed, overallCounts.incomplete);
-            colors.push(statusColors['completed'], statusColors['pending']);
-        }
+        categories.forEach(cat => {
+            completedData.push(apiStats[cat].completed);
+            incompleteData.push(apiStats[cat].incomplete);
+        });
 
-
-        return { labels, data, colors };
+        return { 
+            labels: categories, 
+            datasets: [
+                {
+                    label: 'Completed',
+                    data: completedData,
+                    backgroundColor: statusColors['completed'],
+                    borderColor: statusColors['completed'].replace('0.7', '1'),
+                    borderWidth: 1
+                },
+                {
+                    label: 'Incomplete (Pending/In Progress)',
+                    data: incompleteData,
+                    backgroundColor: statusColors['pending'],
+                    borderColor: statusColors['pending'].replace('0.7', '1'),
+                    borderWidth: 1
+                }
+            ]
+        };
     };
 
-    const renderTaskChart = (chartData, groupBy) => {
+    const renderTaskChart = (chartData) => {
         const ctx = document.getElementById('task-chart');
 
         if (!ctx) return;
@@ -732,19 +684,21 @@ document.addEventListener('DOMContentLoaded', () => {
             type: 'bar',
             data: {
                 labels: chartData.labels,
-                datasets: [{
-                    label: `Tasks Grouped by ${groupBy.charAt(0).toUpperCase() + groupBy.slice(1)}`,
-                    data: chartData.data,
-                    backgroundColor: chartData.colors,
-                    borderColor: chartData.colors.map(c => c.replace('0.7', '1')), 
-                    borderWidth: 1
-                }]
+                datasets: chartData.datasets
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                 scales: {
+                    x: {
+                        stacked: true,
+                        title: {
+                            display: true,
+                            text: 'Task Categories'
+                        }
+                    },
                     y: {
+                        stacked: true, 
                         beginAtZero: true,
                         title: {
                             display: true,
@@ -758,11 +712,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 },
                 plugins: {
                     legend: {
-                        display: false 
+                        display: true
                     },
                     title: {
                         display: true,
-                        text: `Task Breakdown by ${groupBy.includes('status') ? 'Overall Status' : groupBy.charAt(0).toUpperCase() + groupBy.slice(1)}`
+                        text: `Task Breakdown by Category and Status`
                     }
                 }
             }
@@ -770,25 +724,15 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     
     const setupStatisticsInteractions = (stats) => {
-        const groupByFilter = document.getElementById('group-by-filter');
-
-        const initialGroup = groupByFilter ? groupByFilter.value : 'category';
-        const initialChartData = formatStatsForChart(stats, initialGroup);
-        renderTaskChart(initialChartData, initialGroup);
-
-        if (groupByFilter) {
-            groupByFilter.addEventListener('change', (e) => {
-                const newGroup = e.target.value;
-                const newChartData = formatStatsForChart(stats, newGroup);
-                renderTaskChart(newChartData, newGroup);
-            });
+        const chartData = formatStatsForChart(stats);
+        renderTaskChart(chartData);
+        const filterGroup = document.querySelector('.statistics-container .filters');
+        if (filterGroup) {
+            filterGroup.style.display = 'none';
         }
     };
 
 
-    // ===========================================
-    // 2. INTERACTION SETUP FUNCTIONS
-    // ===========================================
 
     const reloadCurrentPage = async (page) => {
         const activeItem = document.querySelector(`.nav-item[data-page="${page}"]`);
@@ -819,7 +763,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const description = document.getElementById('task-description').value.trim();
                 const dueDate = document.getElementById('task-date').value.trim();
                 const dueTime = document.getElementById('task-time').value.trim();
-                // Category is optional
                 const category = document.getElementById('task-category').value.trim() || null;
 
                 if (!title || title.length < 3) {
@@ -983,7 +926,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
 
-                // Category is intentionally null
                 const newTaskData = {
                     title: title,
                     description: null,
@@ -1041,7 +983,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     const newDescription = document.getElementById(`edit-description-${id}`).value.trim();
                     const newDate = document.getElementById(`edit-date-${id}`).value.trim(); 
                     const newTime = document.getElementById(`edit-time-${id}`).value.trim();
-                    // Category is optional
                     const newCategory = document.getElementById(`edit-category-${id}`).value.trim() || null;
                     const newStatus = document.getElementById(`edit-status-${id}`).value.trim();
                     
@@ -1164,11 +1105,6 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     };
-
-
-    // ===========================================
-    // 3. MAIN NAVIGATION LOGIC
-    // ===========================================
     
     const loadContent = async (pageName) => {
         
@@ -1201,21 +1137,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (isConfirmed) {
                     logoutUser();
-                    // On logout, redirect to the login form
                     navItems.forEach(i => i.classList.remove('active'));
                     document.querySelector('[data-page="home"]').classList.add('active'); 
                     mainContent.innerHTML = getLoginRegisterContent();
                     setupAuthInteractions();
                     alert("You have been logged out.");
                 } else {
-                    // Do nothing, stay on page
                 }
 
             } else {
                 navItems.forEach(i => i.classList.remove('active'));
                 item.classList.add('active');
-                
-                // If user is not logged in, force navigation to the login screen
                 if (!accessToken && pageName !== 'home') {
                     mainContent.innerHTML = getLoginRegisterContent();
                     setupAuthInteractions();
@@ -1227,8 +1159,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
     
-    // Initial page load
-    checkAndClearExpiredToken(); // Check for expired token first
+
+    checkAndClearExpiredToken();
 
     if (!accessToken) {
         document.querySelector('[data-page="home"]').classList.add('active');

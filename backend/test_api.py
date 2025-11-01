@@ -30,14 +30,14 @@ def test_user():
     email = "apitest@example.com"
     password = "testpassword123"
 
-    # Try to register the user
+ 
     client.post("/api/auth/register", json={
         "name": "API Tester",
         "email": email,
         "password": password
     })
 
-    # Then log in
+  
     login_response = client.post("/api/auth/login", data={
         "username": email,
         "password": password
@@ -53,7 +53,7 @@ def auth_header(test_user):
     return {"Authorization": f"Bearer {test_user['token']}"}
 
 
-# --- Tests ---
+
 
 def test_create_task(auth_header):
     response = client.post("/api/tasks/", json={
@@ -81,7 +81,7 @@ def test_get_tasks(auth_header):
 
 
 def test_update_task(auth_header):
-    # We use the global task created before
+
     response = client.get("/api/tasks/", headers=auth_header)
     task_id = response.json()[0]["id"]
 
@@ -108,7 +108,6 @@ def test_get_stats(auth_header):
 
 
 def test_delete_task(auth_header):
-    # Get a task to delete
     response = client.get("/api/tasks/", headers=auth_header)
     task_id = response.json()[0]["id"]
 
