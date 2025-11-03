@@ -15,7 +15,6 @@ router= APIRouter(
 
 oAuth2_scheme= OAuth2PasswordBearer(tokenUrl="api/auth/login")
 
-# --- HELPER FUNCTION FOR DATA CONVERSION (Kept for completeness) ---
 def format_task_output(task: dict) -> dict:
     """Converts MySQL date/time objects (date, timedelta) to string format for JSON."""
     if not task:
@@ -36,7 +35,6 @@ def format_task_output(task: dict) -> dict:
     return task
 
 def get_current_user(token: str = Depends(oAuth2_scheme)):
-    # ... (get_current_user logic remains the same)
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -91,7 +89,6 @@ def create_task(task: models.TaskCreate, current_user: dict = Depends(get_curren
         INSERT INTO tasks (title, description, category, status, dueDate, dueTime, user_id)
         VALUES (%s, %s, %s, %s, %s, %s, %s)
         """
-        # FIX APPLIED: Ensure category is passed as None if it's empty
         params = (
             task.title, 
             task.description if task.description else None, 
@@ -161,7 +158,6 @@ def update_task(id: int, task_update: models.TaskUpdate, current_user: dict = De
         UPDATE tasks SET title=%s, description=%s, category=%s, status=%s, dueDate=%s, dueTime=%s
         WHERE id = %s AND user_id = %s
         """
-        # FIX APPLIED: Ensure category is passed as None if it's empty
         params = (
             task_update.title, 
             task_update.description if task_update.description else None, 
@@ -191,7 +187,6 @@ def update_task(id: int, task_update: models.TaskUpdate, current_user: dict = De
         
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_task(id: int, current_user: dict = Depends(get_current_user)):
-    # ... (delete_task logic remains the same)
     conn = None
     cursor = None
     try:
@@ -223,7 +218,6 @@ def delete_task(id: int, current_user: dict = Depends(get_current_user)):
 
 @router.get("/stats") 
 def get_task_stats(current_user: dict = Depends(get_current_user)):
-    # ... (get_task_stats logic remains the same)
     conn = None
     cursor = None
     try:
@@ -253,7 +247,7 @@ def get_task_stats(current_user: dict = Depends(get_current_user)):
             
             if row['status'] == 'completed':
                 formatted_stats[category]['completed'] += row['count']
-            else: # pending, in_progress
+            else:
                 formatted_stats[category]['incomplete'] += row['count']
         
         return formatted_stats

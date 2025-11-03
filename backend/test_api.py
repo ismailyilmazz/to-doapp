@@ -112,4 +112,4 @@ def test_delete_task(auth_header):
     task_id = response.json()[0]["id"]
 
     response = client.delete(f"/api/tasks/{task_id}", headers=auth_header)
-    assert response.status_code in (204, 404), response.text  # 404 if already deleted
+    assert response.status_code in (204, 404), response.text 

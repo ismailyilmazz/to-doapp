@@ -7,8 +7,8 @@ from jose import JWTError, jwt
 
 load_dotenv()
 
-SECRET_KEY = os.getenv("SECRET_KEY", "aeaiwaglargjeiaoghaergs")
-ALGORITHM = os.getenv("ALGORITHM", "HS256")
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = os.getenv("ALGORITHM")
 
 try:
   
@@ -30,7 +30,6 @@ def create_access_token(data:dict, expires_delta: Optional[timedelta]=None):
     if expires_delta:
         expire=datetime.now(timezone.utc)+expires_delta
     else:
-        # Use the cleaned ACCESS_TOKEN_EXPIRE_MINUTES variable
         expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     
     to_encode.update({"exp": expire})
