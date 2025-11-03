@@ -3,6 +3,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const mainContent = document.querySelector('.content');
 
     const API_BASE_URL = 'http://127.0.0.1:8000/api';
+    const MAX_CATEGORY_LENGTH = 25;
+    const MAX_TITLE_LENGTH = 20;
+    const MAX_DESCRIPTION_LENGTH = 250;
     
     // Attempt to load saved session data on startup
     let accessToken = localStorage.getItem('accessToken') || null; 
@@ -751,11 +754,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 const dueTime = document.getElementById('task-time').value.trim();
                 const category = document.getElementById('task-category').value.trim() || null;
 
+                if (category && category.length > MAX_CATEGORY_LENGTH) {
+                    alert(`Category name is too long. Must be ${MAX_CATEGORY_LENGTH} characters or less.`);
+                    return; 
+                }
                 if (!title || title.length < 3) {
                     alert('Task title must be at least 3 characters long.');
                     return;
                 }
-                
+
+                if (title.length > MAX_TITLE_LENGTH) {
+                    alert(`Title is too long. Max ${MAX_TITLE_LENGTH} characters.`);
+                    return;
+                }
+
+                if (description && description.length > MAX_DESCRIPTION_LENGTH) {
+                    alert(`Description is too long. Max ${MAX_DESCRIPTION_LENGTH} characters.`);
+                    return;
+                }
+
                 const newTaskData = {
                     title: title,
                     description: description || null,
@@ -912,6 +929,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
 
+                if (title.length > MAX_TITLE_LENGTH) {
+                    alert(`Title is too long. Max ${MAX_TITLE_LENGTH} characters.`);
+                    return;
+                }
                 const newTaskData = {
                     title: title,
                     description: null,
@@ -972,11 +993,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     const newCategory = document.getElementById(`edit-category-${id}`).value.trim() || null;
                     const newStatus = document.getElementById(`edit-status-${id}`).value.trim();
                     
+                    if (newCategory && newCategory.length > MAX_CATEGORY_LENGTH) {
+                        alert(`Category name is too long. Must be ${MAX_CATEGORY_LENGTH} characters or less.`);
+                        return; 
+                    }
+
                     if (newTitle.length < 3) {
                         alert('Title must be at least 3 characters.');
                         return;
                     }
 
+                    if (newTitle.length > MAX_TITLE_LENGTH) {
+                        alert(`Title is too long. Max ${MAX_TITLE_LENGTH} characters.`);
+                        return;
+                    }
+
+                    if (newDescription && newDescription.length > MAX_DESCRIPTION_LENGTH) {
+                        alert(`Description is too long. Max ${MAX_DESCRIPTION_LENGTH} characters.`);
+                        return;
+                    }
                     const updatePayload = {
                         title: newTitle,
                         description: newDescription || null,
