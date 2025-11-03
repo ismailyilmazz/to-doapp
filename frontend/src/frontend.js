@@ -621,21 +621,7 @@ document.addEventListener('DOMContentLoaded', () => {
         'completed': 'rgba(60, 179, 113, 0.7)'   
     };
     
-    const getDeterministicColor = (str) => {
-        let hash = 0;
-        for (let i = 0; i < str.length; i++) {
-            hash = str.charCodeAt(i) + ((hash << 5) - hash);
-        }
-        let color = '#';
-        for (let i = 0; i < 3; i++) {
-            const value = (hash >> (i * 8)) & 0xFF;
-            color += ('00' + value.toString(16)).substr(-2);
-        }
-        const r = parseInt(color.substring(1, 3), 16);
-        const g = parseInt(color.substring(3, 5), 16);
-        const b = parseInt(color.substring(5, 7), 16);
-        return `rgba(${r}, ${g}, ${b}, 0.7)`;
-    };
+ 
 
 
     let taskChartInstance = null; 

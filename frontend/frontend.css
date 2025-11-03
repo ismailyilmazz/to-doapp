@@ -553,7 +553,7 @@ body {
 
 
 
-/* Tasks Page - New task adding part */
+/* Tasks Page - New task adding*/
 
 
 
@@ -749,7 +749,7 @@ body {
     
     background-color: white; 
     padding: 15px;
-    border-radius: 10px; /* fixed radius for consistency */
+    border-radius: 10px;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
 }
 
