@@ -545,7 +545,15 @@ body {
     background-color: var(--card-green);
     color: var(--dark-text); 
 }
-
+.green-card {
+    background-color: var(--card-green);
+    color: var(--dark-text);
+}
+.green-card .completed-button {
+    background-color: var(--white-text);
+    color: var(--card-green);
+    cursor: not-allowed; 
+}
 .task-list-item.red-card {
     background-color: var(--card-red);
     color: var(--white-text);

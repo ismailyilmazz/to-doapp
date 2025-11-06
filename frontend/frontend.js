@@ -6,11 +6,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const MAX_CATEGORY_LENGTH = 25;
     const MAX_TITLE_LENGTH = 20;
     const MAX_DESCRIPTION_LENGTH = 250;
-    
+
     // Attempt to load saved session data on startup
-    let accessToken = localStorage.getItem('accessToken') || null; 
+    let accessToken = localStorage.getItem('accessToken') || null;
     let currentUsername = localStorage.getItem('currentUsername') || 'Guest';
-    let currentUserId = null; 
+    let currentUserId = null;
 
     // Helper to get authorization headers
     const getAuthHeaders = () => ({
@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const currentTime = Date.now();
         const difference = dueTime - currentTime;
 
-        const oneDayInMs = 24 * 60 * 60 * 1000; 
+        const oneDayInMs = 24 * 60 * 60 * 1000;
 
         return difference <= oneDayInMs;
     };
@@ -45,7 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const payload = JSON.parse(atob(base64));
 
             const expirationTimeMs = payload.exp * 1000;
-            
+
             return expirationTimeMs > Date.now();
 
         } catch (e) {
@@ -73,7 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return response.data;
         } catch (error) {
             console.error("Registration Error:", error.response);
-            throw error.response; 
+            throw error.response;
         }
     };
 
@@ -83,17 +83,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const response = await axios.post(`${API_BASE_URL}/auth/login`, loginData, {
                 headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8' 
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8'
                 },
                 transformRequest: [(data, headers) => {
-                    return Object.keys(data).map(key => 
+                    return Object.keys(data).map(key =>
                         encodeURIComponent(key) + '=' + encodeURIComponent(data[key])
                     ).join('&');
                 }]
             });
-            
+
             accessToken = response.data.access_token;
-            currentUsername = email.split('@')[0]; 
+            currentUsername = email.split('@')[0];
             localStorage.setItem('accessToken', accessToken);
             localStorage.setItem('currentUsername', currentUsername);
 
@@ -101,10 +101,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (error) {
             console.error("Login Error:", error.response);
-            throw error.response; 
+            throw error.response;
         }
     };
-    
+
     const logoutUser = () => {
         accessToken = null;
         currentUsername = 'Guest';
@@ -120,14 +120,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await axios.get(`${API_BASE_URL}/tasks/`, {
                 headers: getAuthHeaders()
             });
-            return response.data; 
+            return response.data;
         } catch (error) {
             console.error("Fetch Tasks Error:", error.response);
-            
+
             if (error.response && error.response.status === 401) {
                 alert("Session expired or invalid token. Logging out.");
                 logoutUser();
-                await reloadCurrentPage('home'); 
+                await reloadCurrentPage('home');
             }
 
             throw error.response?.data?.detail || "Failed to fetch tasks.";
@@ -159,14 +159,14 @@ document.addEventListener('DOMContentLoaded', () => {
             throw error.response?.data?.detail || "Failed to update task.";
         }
     };
-    
+
     const deleteTask = async (taskId) => {
         if (!accessToken) throw new Error("User not authenticated.");
         try {
             const response = await axios.delete(`${API_BASE_URL}/tasks/${taskId}`, {
                 headers: getAuthHeaders()
             });
-            return isSuccess(response.status); 
+            return isSuccess(response.status);
         } catch (error) {
             console.error("Delete Task Error:", error.response);
             throw error.response?.data?.detail || "Failed to delete task.";
@@ -186,7 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    let cachedTasks = []; 
+    let cachedTasks = [];
 
     const getCategoryOptionsHtml = (tasks) => {
         const uniqueCategories = new Set(tasks.map(t => t.category).filter(cat => cat && cat.trim() !== ''));
@@ -241,22 +241,27 @@ document.addEventListener('DOMContentLoaded', () => {
         if (task.status === 'completed') {
             color = 'green';
             statusText = 'Completed';
+
+        } else if (isDueSoon(task)) {
+            alertClass = ' alert-card';
+            color = 'red';
+            statusText = 'Due Soon'; 
+            iconHtml = `<i class="fas fa-exclamation-triangle card-alert-icon"></i>`;
+
         } else if (task.status === 'in-progress') {
             color = 'orange';
             statusText = 'In Progress';
-        } else { 
+
+
+        } else {
             color = 'purple';
             statusText = 'Not Started';
         }
-        
-        if (isDueSoon(task)) {
-            alertClass = ' alert-card'; 
-            color = 'red'; 
-            iconHtml = `<i class="fas fa-exclamation-triangle card-alert-icon"></i>`;
-        } else {
+
+        if (iconHtml === '' && task.status !== 'completed') {
             iconHtml = task.icon ? `<i class="fas ${task.icon} card-alert-icon"></i>` : '';
         }
-        
+
         const dueDateDisplay = task.dueDate || '';
         const timeDisplay = task.dueTime ? task.dueTime.substring(0, 5) : '';
 
@@ -302,8 +307,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return `<option value="${status}" ${task.status === status ? 'selected' : ''}>${displayStatus}</option>`;
         }).join('');
 
-        const formattedDate = task.dueDate || ''; 
-        const formattedTime = task.dueTime ? task.dueTime.substring(0, 5) : ''; 
+        const formattedDate = task.dueDate || '';
+        const formattedTime = task.dueTime ? task.dueTime.substring(0, 5) : '';
 
         return `
             <div class="task-edit-container">
@@ -366,23 +371,19 @@ document.addEventListener('DOMContentLoaded', () => {
         let tasks;
         try {
             tasks = await fetchTasks();
-            cachedTasks = tasks; 
+            cachedTasks = tasks;
         } catch (error) {
             return `<div class="error-message">Error loading tasks: ${error}</div>`;
         }
 
-        const pendingTasks = tasks.filter(t => t.status !== 'completed'); 
-        
         let taskCardsHtml;
-        if (pendingTasks.length === 0 && tasks.length > 0) {
-            taskCardsHtml = `<p style="text-align: center; margin-top: 30px; color: var(--primary-color);">Great job! All ${tasks.length} tasks are complete. Start a new one!</p>`;
-        } else if (tasks.length === 0) {
-             taskCardsHtml = `<p style="text-align: center; margin-top: 30px; color: var(--primary-color);">No tasks found. Click "Add New Task" to begin.</p>`;
+        if (tasks.length === 0) {
+            taskCardsHtml = `<p style="text-align: center; margin-top: 30px; color: var(--primary-color);">No tasks found. Click "Add New Task" to begin.</p>`;
         } else {
-             taskCardsHtml = pendingTasks.map(renderTaskCard).join('');
+            taskCardsHtml = tasks.map(renderTaskCard).join(''); // 'tasks' dizisini kullan (pendingTasks değil)
         }
-        
-        const uniqueCategories = [...new Set(tasks.map(t => t.category))].filter(Boolean);
+
+        const uniqueCategories = [...new Set(tasks.map(t => t.category || 'Uncategorized'))];
         const categoryOptions = uniqueCategories.map(cat => `<option value="${cat}">${cat}</option>`).join('');
 
 
@@ -435,13 +436,13 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (task.status === 'in-progress') {
             colorClass = 'orange-card';
             statusText = 'In Progress';
-        } else { 
+        } else {
             colorClass = 'purple-card';
             statusText = 'Not Started';
         }
-        
+
         if (isDueSoon(task)) {
-             alertIcon = `<i class="fas fa-exclamation-triangle list-alert-icon"></i>`;
+            alertIcon = `<i class="fas fa-exclamation-triangle list-alert-icon"></i>`;
         }
 
         const displayDate = task.dueDate || 'N/A';
@@ -489,15 +490,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const uniqueCategories = [...new Set(tasks.map(t => t.category))].filter(Boolean);
         const categoryOptions = uniqueCategories.map(cat => `<option value="${cat.toLowerCase().replace(/\s/g, '-')}">${cat}</option>`).join('');
-        
+
         const taskListHtml = tasks.map(renderTaskRow).join('');
 
-        const newTaskInputHtml = `
-            <div class="new-task-input-container">
-                <input type="text" id="new-task-title-input" placeholder="Task title (required)" required minlength="1">
-                <button class="submit-btn" id="add-task-list-btn">Add Task</button>
-            </div>
-        `;
 
         return `
             <div class="tasks-container">
@@ -525,7 +520,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </div>
                 
-                ${newTaskInputHtml} <div class="task-list" id="task-list">
+                <div class="task-list" id="task-list">
                     ${taskListHtml || '<p style="text-align: center; color: var(--primary-color);">No tasks found. Use the input field above to quickly add one.</p>'}
                 </div>
             </div>
@@ -575,22 +570,22 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         `;
     };
-    
+
 
     const getStatisticsContent = async () => {
         if (!accessToken) return `<div class="info-message">Please log in to see statistics.</div>`;
-        
+
         let stats;
         try {
             stats = await fetchTaskStats();
         } catch (error) {
             return `<div class="error-message">Error loading statistics: ${error}</div>`;
         }
-        
+
         if (Object.keys(stats).length === 0) {
-             return `<div class="info-message" style="margin-top: 30px; color: var(--primary-color);">No task data available to generate statistics. Create some tasks first!</div>`;
+            return `<div class="info-message" style="margin-top: 30px; color: var(--primary-color);">No task data available to generate statistics. Create some tasks first!</div>`;
         }
-        
+
         setTimeout(() => setupStatisticsInteractions(stats), 0);
 
         return `
@@ -619,15 +614,15 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const statusColors = {
-        'pending': 'rgba(150, 90, 250, 0.7)',     
-        'in-progress': 'rgba(255, 165, 0, 0.7)', 
-        'completed': 'rgba(60, 179, 113, 0.7)'   
+        'pending': 'rgba(150, 90, 250, 0.7)',
+        'in-progress': 'rgba(255, 165, 0, 0.7)',
+        'completed': 'rgba(60, 179, 113, 0.7)'
     };
-    
- 
 
 
-    let taskChartInstance = null; 
+
+
+    let taskChartInstance = null;
 
     const formatStatsForChart = (apiStats) => {
         const categories = Object.keys(apiStats).sort();
@@ -639,8 +634,8 @@ document.addEventListener('DOMContentLoaded', () => {
             incompleteData.push(apiStats[cat].incomplete);
         });
 
-        return { 
-            labels: categories, 
+        return {
+            labels: categories,
             datasets: [
                 {
                     label: 'Completed',
@@ -664,7 +659,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const ctx = document.getElementById('task-chart');
 
         if (!ctx) return;
-        
+
         if (taskChartInstance) {
             taskChartInstance.destroy();
         }
@@ -687,15 +682,15 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     },
                     y: {
-                        stacked: true, 
+                        stacked: true,
                         beginAtZero: true,
                         title: {
                             display: true,
                             text: 'Number of Tasks'
                         },
                         ticks: {
-                            precision: 0, 
-                            stepSize: 1  
+                            precision: 0,
+                            stepSize: 1
                         }
                     }
                 },
@@ -711,7 +706,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     };
-    
+
     const setupStatisticsInteractions = (stats) => {
         const chartData = formatStatsForChart(stats);
         renderTaskChart(chartData);
@@ -741,7 +736,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const cancelButton = document.getElementById('cancel-add-task-on-card');
 
         const resetCard = async () => {
-            await reloadCurrentPage('home'); 
+            await reloadCurrentPage('home');
         };
 
         if (form) {
@@ -756,7 +751,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (category && category.length > MAX_CATEGORY_LENGTH) {
                     alert(`Category name is too long. Must be ${MAX_CATEGORY_LENGTH} characters or less.`);
-                    return; 
+                    return;
                 }
                 if (!title || title.length < 3) {
                     alert('Task title must be at least 3 characters long.');
@@ -777,7 +772,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     title: title,
                     description: description || null,
                     category: category,
-                    status: 'pending', 
+                    status: 'pending',
                     dueDate: dueDate || null,
                     dueTime: (dueTime ? dueTime + ":00" : null)
                 };
@@ -796,7 +791,7 @@ document.addEventListener('DOMContentLoaded', () => {
             cancelButton.addEventListener('click', resetCard);
         }
     };
-    
+
     const setupDashboardInteractions = () => {
         const categorySelect = document.getElementById('category');
         const statusSelect = document.getElementById('status');
@@ -807,19 +802,19 @@ document.addEventListener('DOMContentLoaded', () => {
             console.warn("Dashboard elements not found for interaction setup. Waiting for next load.");
             return;
         }
-        
+
         const applyDashboardFilters = () => {
             const selectedCategory = categorySelect.value;
             const selectedStatus = statusSelect.value;
             const taskCards = taskGrid.querySelectorAll('.task-card:not(.empty-card)');
-            
+
             taskCards.forEach(card => {
                 const itemCategory = card.querySelector('.card-category').textContent.replace('Category: ', '').trim();
                 const itemStatus = card.getAttribute('data-status');
 
                 const categoryMatch = selectedCategory === 'all' || itemCategory === selectedCategory;
-                const statusMatch = selectedStatus === 'all' || itemStatus === selectedStatus;
-                
+                const statusMatch = (selectedStatus === 'all' && itemStatus !== 'completed') || itemStatus === selectedStatus;
+
                 if (categoryMatch && statusMatch) {
                     card.style.display = 'flex';
                 } else {
@@ -839,18 +834,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 addTaskCard.setAttribute('data-action', 'add-task-active');
                 addTaskCard.innerHTML = getTaskFormHtml();
                 setupAddTaskInteractionsOnCard(addTaskCard);
-                addTaskCard.removeEventListener('click', addCardClickListener); 
+                addTaskCard.removeEventListener('click', addCardClickListener);
             };
             addTaskCard.addEventListener('click', addCardClickListener);
         }
-        
+
         taskGrid.addEventListener('click', async (e) => {
             const target = e.target.closest('button');
             if (!target || !target.dataset.id) return;
-            
+
             const taskId = parseInt(target.dataset.id);
             let newStatus;
-            
+
             if (target.classList.contains('start-button')) {
                 newStatus = 'in-progress';
             } else if (target.classList.contains('completed-button') && !target.disabled) {
@@ -858,10 +853,10 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 return;
             }
-            
+
             const taskToUpdate = cachedTasks.find(t => t.id === taskId);
             if (!taskToUpdate) return alert("Task not found locally.");
-            
+
             const updatePayload = {
                 title: taskToUpdate.title,
                 description: taskToUpdate.description,
@@ -870,15 +865,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 dueTime: taskToUpdate.dueTime,
                 status: newStatus
             };
-            
+
             try {
                 await updateTask(taskId, updatePayload);
                 alert(`Task status updated to: ${newStatus.toUpperCase()}`);
-                await reloadCurrentPage('home'); 
+                await reloadCurrentPage('home');
             } catch (error) {
                 alert(`ERROR: Failed to update task status. Details: ${error}`);
             }
         });
+        applyDashboardFilters();
     };
 
 
@@ -888,7 +884,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const statusFilter = document.getElementById('status-filter');
         const addTaskBtn = document.getElementById('add-task-list-btn');
 
-        if (!listContainer || !categoryFilter || !statusFilter || !addTaskBtn) {
+        if (!listContainer || !categoryFilter || !statusFilter) {
             console.warn("Tasks elements not found for interaction setup. Waiting for next load.");
             return;
         }
@@ -905,9 +901,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const categoryMatch = selectedCategory === 'all' || itemCategory === selectedCategory;
                 const statusMatch = selectedStatus === 'all' || itemStatus === selectedStatus;
-                
+
                 if (categoryMatch && statusMatch) {
-                    item.style.display = 'grid'; 
+                    item.style.display = 'grid';
                 } else {
                     item.style.display = 'none';
                 }
@@ -917,53 +913,32 @@ document.addEventListener('DOMContentLoaded', () => {
         if (categoryFilter) categoryFilter.addEventListener('change', applyFilters);
         if (statusFilter) statusFilter.addEventListener('change', applyFilters);
 
-        if (addTaskBtn) {
-            addTaskBtn.addEventListener('click', async () => {
-                const titleInput = document.getElementById('new-task-title-input');
-                const title = titleInput.value.trim();
-                
-                const today = new Date().toISOString().slice(0, 10);
 
-                if (title.length < 3) {
-                    alert('Task title must be at least 3 characters long.');
-                    return;
-                }
-
-                if (title.length > MAX_TITLE_LENGTH) {
-                    alert(`Title is too long. Max ${MAX_TITLE_LENGTH} characters.`);
-                    return;
-                }
-                const newTaskData = {
-                    title: title,
-                    description: null,
-                    category: null, 
-                    status: 'pending',
-                    dueDate: today, 
-                    dueTime: '00:00:00'
-                };
-
-                try {
-                    await createTask(newTaskData);
-                    titleInput.value = ''; 
-                    alert(`Task "${title}" created. Click Edit to add details.`);
-                    await reloadCurrentPage('tasks');
-                } catch (error) {
-                    alert(`ERROR: Failed to create task. Details: ${error}`);
-                }
-            });
-        }
 
 
         const findTask = (id) => cachedTasks.find(t => t.id === id);
 
         const handleDeleteTask = async (id) => {
-            if (confirm('Are you sure you want to delete this task?')) {
+            const taskToDelete = findTask(id);
+            if (!taskToDelete) {
+                alert("Error: Task not found in cache.");
+                return;
+            }
+
+            if (confirm(`Are you sure you want to delete this task?\n\n"${taskToDelete.title}"`)) {
                 try {
                     await deleteTask(id);
-                    alert(`Task ID ${id} deleted.`);
-                    await reloadCurrentPage('tasks');
+
+                    const taskElement = document.querySelector(`.task-list-item[data-id="${id}"]`);
+                    if (taskElement) {
+                        taskElement.remove();
+                    }
+                    cachedTasks = cachedTasks.filter(task => task.id !== id);
+
+                    alert(`Task "${taskToDelete.title}" deleted.`);
                 } catch (error) {
                     alert(`ERROR: Failed to delete task. Details: ${error}`);
+                    await reloadCurrentPage('tasks');
                 }
             }
         };
@@ -978,7 +953,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 taskItem.setAttribute('data-original-html', taskItem.innerHTML);
 
                 taskItem.classList.add('editing');
-                taskItem.innerHTML = getInlineEditFormHtml(task); 
+                taskItem.innerHTML = getInlineEditFormHtml(task);
 
                 const form = document.getElementById(`task-edit-form-${id}`);
                 const originalTaskHtml = taskItem.getAttribute('data-original-html');
@@ -988,14 +963,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     const newTitle = document.getElementById(`edit-title-${id}`).value.trim();
                     const newDescription = document.getElementById(`edit-description-${id}`).value.trim();
-                    const newDate = document.getElementById(`edit-date-${id}`).value.trim(); 
+                    const newDate = document.getElementById(`edit-date-${id}`).value.trim();
                     const newTime = document.getElementById(`edit-time-${id}`).value.trim();
                     const newCategory = document.getElementById(`edit-category-${id}`).value.trim() || null;
                     const newStatus = document.getElementById(`edit-status-${id}`).value.trim();
-                    
+
                     if (newCategory && newCategory.length > MAX_CATEGORY_LENGTH) {
                         alert(`Category name is too long. Must be ${MAX_CATEGORY_LENGTH} characters or less.`);
-                        return; 
+                        return;
                     }
 
                     if (newTitle.length < 3) {
@@ -1018,9 +993,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         category: newCategory,
                         status: newStatus,
                         dueDate: newDate || null,
-                        dueTime: (newTime ? newTime + ":00" : null) 
+                        dueTime: (newTime ? newTime + ":00" : null)
                     };
-                    
+
                     try {
                         await updateTask(id, updatePayload);
                         alert(`Task "${newTitle}" successfully updated.`);
@@ -1033,7 +1008,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const cancelButton = form.querySelector('.cancel-edit-btn');
                 cancelButton.addEventListener('click', async () => {
                     taskItem.classList.remove('editing');
-                    await reloadCurrentPage('tasks'); 
+                    await reloadCurrentPage('tasks');
                 });
             }
         };
@@ -1053,7 +1028,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
-    
+
     const setupAuthInteractions = () => {
         const switchButtons = document.querySelectorAll('.auth-switch .switch-btn');
         const authForms = document.querySelectorAll('.auth-form');
@@ -1084,16 +1059,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (form.classList.contains('login-form')) {
                     const emailValue = document.getElementById('login-email').value.trim();
                     const passwordValue = document.getElementById('login-password').value.trim();
-                    
+
                     if (!emailValue || !passwordValue) {
                         alert("Please enter both email and password.");
                         return;
                     }
-                    
+
                     try {
                         await loginUser(emailValue, passwordValue);
                         alert(`Logged in successfully, ${currentUsername}!`);
-                        
+
                         await reloadCurrentPage('home');
 
                     } catch (error) {
@@ -1103,16 +1078,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
 
 
-                } else { 
+                } else {
                     const nameInput = document.getElementById('register-username').value.trim();
                     const emailInput = document.getElementById('register-email').value.trim();
                     const passwordInput = document.getElementById('register-password').value.trim();
-                    
+
                     if (!nameInput || !emailInput || !passwordInput) {
-                         alert("Please fill in all registration fields.");
-                         return;
+                        alert("Please fill in all registration fields.");
+                        return;
                     }
-                    
+
                     try {
                         await registerUser(nameInput, emailInput, passwordInput);
                         alert(`Registration succeeded! You can now log in.`);
@@ -1126,9 +1101,9 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     };
-    
+
     const loadContent = async (pageName) => {
-        
+
         if (pageName === 'home') {
             mainContent.innerHTML = await getDashboardContent();
             setupDashboardInteractions();
@@ -1137,7 +1112,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setupTasksInteractions();
         } else if (pageName === 'stats') {
             mainContent.innerHTML = await getStatisticsContent();
-        } 
+        }
         else {
             mainContent.innerHTML = `
             <h2>${pageName.charAt(0).toUpperCase() + pageName.slice(1)} Page</h2>
@@ -1159,7 +1134,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (isConfirmed) {
                     logoutUser();
                     navItems.forEach(i => i.classList.remove('active'));
-                    document.querySelector('[data-page="home"]').classList.add('active'); 
+                    document.querySelector('[data-page="home"]').classList.add('active');
                     mainContent.innerHTML = getLoginRegisterContent();
                     setupAuthInteractions();
                     alert("You have been logged out.");
@@ -1172,14 +1147,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!accessToken && pageName !== 'home') {
                     mainContent.innerHTML = getLoginRegisterContent();
                     setupAuthInteractions();
-                    document.querySelector('[data-page="home"]').classList.add('active'); 
+                    document.querySelector('[data-page="home"]').classList.add('active');
                 } else {
                     loadContent(pageName);
                 }
             }
         });
     });
-    
+
 
     checkAndClearExpiredToken();
 
