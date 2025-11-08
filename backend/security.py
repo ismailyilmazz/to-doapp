@@ -7,9 +7,15 @@ from jose import JWTError, jwt
 
 load_dotenv()
 
-SECRET_KEY= os.getenv("SECRET_KEY")
-ALGORITHM= os.getenv("ALGORITHM")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES"))
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = os.getenv("ALGORITHM")
+
+try:
+  
+    ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 1))
+except ValueError:
+    ACCESS_TOKEN_EXPIRE_MINUTES = 1
+
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto") #Hashleyerek dbye kaydediyorum,bcrypt ile değişebilir?
 
@@ -24,7 +30,7 @@ def create_access_token(data:dict, expires_delta: Optional[timedelta]=None):
     if expires_delta:
         expire=datetime.now(timezone.utc)+expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)

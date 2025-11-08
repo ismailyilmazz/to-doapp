@@ -2,11 +2,13 @@ from fastapi import FastAPI
 from routers import auth, tasks
 from fastapi.middleware.cors import CORSMiddleware
 
-app=FastAPI(title="Task Manager API")
+app=FastAPI(title="Task Manager API", docs_url = "/docs")
 
 origins= [
     "http://localhost",
-    "http://localhost:5173",
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
+    
 ]
 
 app.add_middleware(
