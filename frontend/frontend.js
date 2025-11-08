@@ -240,7 +240,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (task.status === 'completed') {
             color = 'green';
-            statusText = 'Completed';
+            statusText = 'completed';
 
         } else if (isDueSoon(task)) {
             alertClass = ' alert-card';
@@ -248,7 +248,7 @@ document.addEventListener('DOMContentLoaded', () => {
             statusText = 'Due Soon'; 
             iconHtml = `<i class="fas fa-exclamation-triangle card-alert-icon"></i>`;
 
-        } else if (task.status === 'in-progress') {
+        } else if (task.status === 'in_progress') {
             color = 'orange';
             statusText = 'In Progress';
 
@@ -269,12 +269,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
         let buttonHtml;
-        if (task.status === 'in-progress') {
-            buttonHtml = `<button class="completed-button" data-id="${task.id}" title="Mark as Completed"><i class="fas fa-check"></i></button>`;
+        if (task.status === 'in_progress') {
+            buttonHtml = `<button class="completed-button" data-id="${task.id}" title="Mark as completed"><i class="fas fa-check"></i></button>`;
         } else if (task.status === 'pending' || task.status === 'not started') {
             buttonHtml = `<button class="start-button" data-id="${task.id}" title="Start Task">Start</button>`;
         } else {
-            buttonHtml = `<button class="completed-button disabled" disabled>Completed</button>`;
+            buttonHtml = `<button class="completed-button disabled" disabled>completed</button>`;
         }
 
 
@@ -300,7 +300,7 @@ document.addEventListener('DOMContentLoaded', () => {
             `<option value="${cat}" ${task.category === cat ? 'selected' : ''}>${cat}</option>`
         ).join('');
 
-        const statusOptions = ['pending', 'in-progress', 'completed'].map(status => {
+        const statusOptions = ['pending', 'in_progress', 'completed'].map(status => {
             let displayStatus = status.charAt(0).toUpperCase() + status.slice(1).replace('-', ' ');
             if (status === 'pending') displayStatus = 'Not Started';
 
@@ -404,8 +404,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         <select id="status">
                             <option value="all">-------------</option>
                             <option value="pending">Not Started</option>
-                            <option value="in-progress">In Progress</option>
-                            <option value="completed">Completed</option>
+                            <option value="in_progress">In Progress</option>
+                            <option value="completed">completed</option>
                         </select>
                         <i class="fas fa-caret-down"></i>
                     </div>
@@ -432,8 +432,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (task.status === 'completed') {
             colorClass = 'green-card';
-            statusText = 'Completed';
-        } else if (task.status === 'in-progress') {
+            statusText = 'completed';
+        } else if (task.status === 'in_progress') {
             colorClass = 'orange-card';
             statusText = 'In Progress';
         } else {
@@ -512,8 +512,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             <select id="status-filter">
                                 <option value="all">-------------</option>
                                 <option value="pending">Not Started</option>
-                                <option value="in-progress">In Progress</option>
-                                <option value="completed">Completed</option>
+                                <option value="in_progress">In Progress</option>
+                                <option value="completed">completed</option>
                             </select>
                             <i class="fas fa-caret-down"></i>
                         </div>
@@ -615,7 +615,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const statusColors = {
         'pending': 'rgba(150, 90, 250, 0.7)',
-        'in-progress': 'rgba(255, 165, 0, 0.7)',
+        'in_progress': 'rgba(255, 165, 0, 0.7)',
         'completed': 'rgba(60, 179, 113, 0.7)'
     };
 
@@ -638,14 +638,14 @@ document.addEventListener('DOMContentLoaded', () => {
             labels: categories,
             datasets: [
                 {
-                    label: 'Completed',
+                    label: 'completed',
                     data: completedData,
                     backgroundColor: statusColors['completed'],
                     borderColor: statusColors['completed'].replace('0.7', '1'),
                     borderWidth: 1
                 },
                 {
-                    label: 'Incomplete (Pending/In Progress)',
+                    label: 'Incomplete (pending/In Progress)',
                     data: incompleteData,
                     backgroundColor: statusColors['pending'],
                     borderColor: statusColors['pending'].replace('0.7', '1'),
@@ -847,7 +847,7 @@ document.addEventListener('DOMContentLoaded', () => {
             let newStatus;
 
             if (target.classList.contains('start-button')) {
-                newStatus = 'in-progress';
+                newStatus = 'in_progress';
             } else if (target.classList.contains('completed-button') && !target.disabled) {
                 newStatus = 'completed';
             } else {
