@@ -1,8 +1,17 @@
 from fastapi import FastAPI
 from routers import auth, tasks
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+import database
 
-app=FastAPI(title="Task Manager API", docs_url = "/docs")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("Sunucu başlıyor... Veritabanı kontrol ediliyor...")
+    database.init_db()
+    yield
+    print("Sunucu kapanıyor...")
+
+app=FastAPI(title="Task Manager API", docs_url = "/docs", lifespan=lifespan)
 
 origins= [
     "http://localhost",
