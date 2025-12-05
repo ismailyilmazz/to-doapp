@@ -43,7 +43,6 @@ def init_db():
     cursor = conn.cursor()
     
     try:
-        # 1. USERS Tablosunu Oluştur (Eğer yoksa)
         create_users_table = """
         CREATE TABLE IF NOT EXISTS users (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -54,16 +53,13 @@ def init_db():
         );
         """
         cursor.execute(create_users_table)
-        #Migration: Eğer users tablosu zaten varsa ama 'role' sütunu yoksa ekle
         try:
             cursor.execute("SELECT role FROM users LIMIT 1")
             cursor.fetchall()
         except Error:
-            # Hata verdiyse role sütunu yok demektir, ekleyelim
             print("Tablo var ama 'role' sütunu eksik. Ekleniyor...")
             cursor.execute("ALTER TABLE users ADD COLUMN role ENUM('user', 'admin') NOT NULL DEFAULT 'user'")
 
-        #TASKS Tablosu
         create_tasks_table = """
         CREATE TABLE IF NOT EXISTS tasks (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -81,7 +77,6 @@ def init_db():
         """
         cursor.execute(create_tasks_table)
 
-        #Migration: Tasks tablosunda 'assigned_to' yoksa ekle
         try:
             cursor.execute("SELECT assigned_to FROM tasks LIMIT 1")
             cursor.fetchall()
@@ -91,7 +86,6 @@ def init_db():
              cursor.execute("ALTER TABLE tasks ADD FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL")
 
 
-        # ATTACHMENTS Tablosu
         create_attachments_table = """
         CREATE TABLE IF NOT EXISTS attachments (
             id INT AUTO_INCREMENT PRIMARY KEY,

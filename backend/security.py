@@ -10,14 +10,13 @@ load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
 
-try:
-  
+try:  
     ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 1))
 except ValueError:
     ACCESS_TOKEN_EXPIRE_MINUTES = 1
 
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto") #Hashleyerek dbye kaydediyorum,bcrypt ile değişebilir?
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto") #Hashleyerek dbye kaydediyorum
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)

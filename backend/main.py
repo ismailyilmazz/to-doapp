@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from routers import auth, tasks
+from routers import auth, tasks, files
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import database
@@ -30,6 +30,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(tasks.router)
+app.include_router(files.router)
 
 @app.get("/")
 def read_root():
