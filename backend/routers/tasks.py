@@ -4,6 +4,7 @@ import database
 import models
 from datetime import date, time, timedelta 
 from routers.auth import get_current_user 
+import os
 
 router = APIRouter(
     prefix="/api/tasks",
@@ -173,6 +174,16 @@ def delete_task(id: int, current_user: dict = Depends(get_current_user)):
 
         if current_user['role'] != 'admin' and task['user_id'] != current_user['id']:
              raise HTTPException(status_code=403, detail="Not authorized to delete this task")
+
+        # Dosyaları diskten silme işlemi
+        cursor.execute("SELECT file_path FROM attachments WHERE task_id = %s", (id,))
+        attachments = cursor.fetchall()
+        for attachment in attachments:
+            if os.path.exists(attachment['file_path']):
+                try:
+                    os.remove(attachment['file_path'])
+                except Exception as e:
+                    print(f"Dosya silinemedi: {e}") 
 
         query = "DELETE FROM tasks WHERE id = %s"
         cursor.execute(query, (id,))

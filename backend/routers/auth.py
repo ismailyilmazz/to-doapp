@@ -3,6 +3,7 @@ from fastapi.security import OAuth2PasswordBearer, HTTPBearer, HTTPAuthorization
 from jose import JWTError, jwt
 import database, models, security
 from datetime import timedelta
+from typing import List
 
 router = APIRouter(
     prefix="/api/auth",
@@ -110,3 +111,18 @@ def login_for_access_token(user_login: models.UserLogin):
     finally:
         if cursor: cursor.close()
         if conn and conn.is_connected(): conn.close()
+
+@router.get("/users", response_model=List[models.User])
+def get_all_users(current_user: dict = Depends(get_current_user)):
+    if current_user['role'] != 'admin':
+        raise HTTPException(status_code=403, detail="Not authorized")
+        
+    conn = database.get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT id, name, email, role FROM users")
+        users = cursor.fetchall()
+        return users
+    finally:
+        cursor.close()
+        conn.close()
