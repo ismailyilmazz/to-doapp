@@ -121,8 +121,8 @@ def login_for_access_token(
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-        access_token = security.create_access_token(data={"sub": user['email']})
-        return {"access_token": access_token, "token_type": "bearer"}
+        access_token = security.create_access_token(data={"sub": user['email'], "role": user['role']})
+        return {"access_token": access_token, "token_type": "bearer", "role": user['role']} # YENİ GELDİ BU :)
 
     except HTTPException:
         raise
