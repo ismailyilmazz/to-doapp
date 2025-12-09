@@ -6,18 +6,67 @@ document.addEventListener('DOMContentLoaded', () => {
     const MAX_CATEGORY_LENGTH = 25;
     const MAX_TITLE_LENGTH = 20;
     const MAX_DESCRIPTION_LENGTH = 250;
+    let cachedUsers = [];
 
-    // Attempt to load saved session data on startup
+    //task sort
+    const sortTasksByUser = (taskList) => {
+        return taskList.sort((a, b) => {
+            // Görevin üzerinde kim varsa (Atanan yoksa Sahibi) onun ismini al
+            const personA = a.assigned_to ? getUserNameById(a.assigned_to) : getUserNameById(a.user_id);
+            const personB = b.assigned_to ? getUserNameById(b.assigned_to) : getUserNameById(b.user_id);
+            
+            // İsimlere göre alfabetik sırala
+            return personA.localeCompare(personB);
+        });
+    };
+
+    //dosya formatlama 
+    const formatFileSize = (bytes) => {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    };
+
+    const formatDate = (dateString) => {
+        if (!dateString) return '';
+        return new Date(dateString).toLocaleDateString('tr-TR', {
+            day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+        });
+    };
+    // ID'den kullanıcı adını bul
+    const getUserNameById = (userId) => {
+        if (!userId) return 'Bilinmiyor';
+        const user = cachedUsers.find(u => u.id === userId);
+        return user ? user.name : `ID: ${userId}`;
+    };
     let accessToken = localStorage.getItem('accessToken') || null;
     let currentUsername = localStorage.getItem('currentUsername') || 'Guest';
     let currentUserId = null;
 
-    // Helper to get authorization headers
     const getAuthHeaders = () => ({
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
     });
-
+    const parseJwt = (token) => {
+        try {
+            return JSON.parse(atob(token.split('.')[1]));
+        } catch (e) {
+            return {};
+        }
+    };
+    const isAdmin = () => localStorage.getItem('userRole') === 'admin';
+    const fetchUsers = async () => {
+        if (!isAdmin()) return [];
+        try {
+            const response = await axios.get(`${API_BASE_URL}/auth/users`, { headers: getAuthHeaders() });
+            return response.data; 
+        } catch (error) {
+            console.error("Kullanıcılar çekilemedi", error);
+            return [];
+        }
+    };
     const isSuccess = (status) => status >= 200 && status < 300;
 
     const isDueSoon = (task) => {
@@ -33,6 +82,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const oneDayInMs = 24 * 60 * 60 * 1000;
 
         return difference <= oneDayInMs;
+    };
+
+    const updateAdminUI = () => {
+        const adminBtn = document.getElementById('nav-admin-btn');
+        if (isAdmin()) {
+            adminBtn.classList.remove('hidden');
+        } else {
+            adminBtn.classList.add('hidden');
+        }
     };
 
     const isTokenValid = (token) => {
@@ -79,24 +137,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const loginUser = async (email, password) => {
         try {
-            const loginData = { username: email, password: password };
+            const loginData = { email: email, password: password };
 
-            const response = await axios.post(`${API_BASE_URL}/auth/login`, loginData, {
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8'
-                },
-                transformRequest: [(data, headers) => {
-                    return Object.keys(data).map(key =>
-                        encodeURIComponent(key) + '=' + encodeURIComponent(data[key])
-                    ).join('&');
-                }]
-            });
+            const response = await axios.post(`${API_BASE_URL}/auth/login`, loginData);
 
             accessToken = response.data.access_token;
+            const payload = parseJwt(accessToken);
+            const userRole = payload.role || 'user';
+
             currentUsername = email.split('@')[0];
             localStorage.setItem('accessToken', accessToken);
             localStorage.setItem('currentUsername', currentUsername);
-
+            localStorage.setItem('userRole', userRole);
+            updateAdminUI();
             return response.data;
 
         } catch (error) {
@@ -117,10 +170,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const fetchTasks = async () => {
         if (!accessToken) throw new Error("User not authenticated.");
         try {
-            const response = await axios.get(`${API_BASE_URL}/tasks/`, {
-                headers: getAuthHeaders()
-            });
-            return response.data;
+            let usersPromise = Promise.resolve([]);
+            if (isAdmin()) {
+                 usersPromise = axios.get(`${API_BASE_URL}/auth/users`, { headers: getAuthHeaders() }).then(r => r.data).catch(() => []);
+            }
+
+            const [tasksResponse, usersData] = await Promise.all([
+                axios.get(`${API_BASE_URL}/tasks/`, { headers: getAuthHeaders() }),
+                usersPromise
+            ]);
+            if (usersData.length > 0) cachedUsers = usersData;
+            return tasksResponse.data;
         } catch (error) {
             console.error("Fetch Tasks Error:", error.response);
 
@@ -196,8 +256,32 @@ document.addEventListener('DOMContentLoaded', () => {
         ).join('');
     };
 
-    const getTaskFormHtml = () => {
+    const getTaskFormHtml = async () => {
         const categoryOptions = getCategoryOptionsHtml(cachedTasks);
+        
+        
+        let userOptions = '';
+        
+        // Sadece admin ise kullanıcı listesini getir
+        if (isAdmin()) {
+            try {
+                const response = await axios.get(`${API_BASE_URL}/auth/users`, { headers: getAuthHeaders() });
+                const users = response.data;
+                
+                userOptions = `
+                <div class="form-group-card">
+                    <label>
+                        <i class="fas fa-user-check"></i> Kime Atanacak (Admin):
+                    </label>
+                    <select id="task-assigned-to" class="styled-select">
+                        <option value="" style="color:black;">-- Kendime Ata --</option>
+                        ${users.map(u => `<option value="${u.id}">${u.name} (${u.email})</option>`).join('')}
+                    </select>
+                </div>`;
+            } catch (e) {
+                console.error("Kullanıcılar çekilemedi", e);
+            }
+        }
 
         return `
             <form id="new-task-form-on-card" class="task-creation-form">
@@ -207,6 +291,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="form-group-card">
                     <textarea id="task-description" placeholder="Description..."></textarea>
                 </div>
+
+                <div class="form-group-card">
+                    <label style="font-size:0.9em; font-weight:bold;"><i class="fas fa-paperclip"></i> Dosya Ekle (İsteğe bağlı):</label>
+                    <input type="file" id="task-files" multiple accept=".pdf,.png,.jpg,.docx,.xlsx" style="margin-top:5px; color:white;">
+                </div>
+
+                ${userOptions}
+
                 <div class="form-group-card form-group-date-time">
                     <label>Due:</label>
                     <input type="date" id="task-date"> 
@@ -214,7 +306,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 
                 <div class="form-group-card form-group-category">
-                    <input list="category-list" id="task-category" name="task-category" placeholder="Select or type Category (Optional)">
+                    <input list="category-list" id="task-category" name="task-category" placeholder="Select or type Category">
                     <datalist id="category-list">
                         ${categoryOptions}
                     </datalist>
@@ -230,10 +322,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             </form>
         `;
-    };
+    }
 
 
     const renderTaskCard = (task) => {
+        console.log("Gelen Görev:", task.title, "Dosyalar:", task.attachments);
         let color, statusText;
         let alertClass = '';
         let iconHtml = '';
@@ -266,8 +359,42 @@ document.addEventListener('DOMContentLoaded', () => {
         const timeDisplay = task.dueTime ? task.dueTime.substring(0, 5) : '';
 
         const dueDateHtml = dueDateDisplay ? `<span class="due-date">${dueDateDisplay} <br> ${timeDisplay}</span>` : '';
+        let attachmentsHtml = '';
+        let userInfoHtml = '';
+        if (task.attachments && task.attachments.length > 0) {
+            attachmentsHtml = `<div class="task-attachments" style="margin-top:15px; border-top:1px solid rgba(255,255,255,0.2); padding-top:10px;">`;
+            
+            task.attachments.forEach(file => {
+                // files.py -> /api/files/download/{file_id}
+                const downloadUrl = `${API_BASE_URL}/files/download/${file.id}`;
+                
+                // Yardımcı fonksiyonları kullanıyoruz
+                const sizeStr = formatFileSize(file.file_size);
+                const dateStr = formatDate(file.upload_date);
 
+                attachmentsHtml += `
+                    <div class="attachment-item" style="background:rgba(0,0,0,0.15); border-radius:6px; padding:8px; margin-bottom:6px; display:flex; align-items:center; justify-content:space-between;">
+                        
+                        <div style="display:flex; flex-direction:column; overflow:hidden;">
+                            <a href="#" onclick="window.downloadFileWrapper(event, ${file.id}, '${file.original_name}')" title="İndir" style="color:inherit; text-decoration:none; font-weight:bold; font-size:0.9em; display:flex; align-items:center; gap:6px;">
+                                <i class="fas fa-file-alt"></i> 
+                                <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px;">${file.original_name}</span>
+                            </a>
+                            <span style="font-size:0.75em; opacity:0.8; margin-top:3px;">
+                                ${sizeStr} • ${dateStr}
+                            </span>
+                        </div>
 
+                        <button onclick="window.deleteAttachmentWrapper(${file.id}, this    )" title="Dosyayı Sil" style="background:none; border:none; color:#ffb3b3; cursor:pointer; font-size:1.1em; padding:5px; transition:color 0.2s;">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </div>
+                `;
+            });
+            attachmentsHtml += `</div>`;
+        }
+
+        let assignedInfoHtml = '';
         let buttonHtml;
         if (task.status === 'in_progress') {
             buttonHtml = `<button class="completed-button" data-id="${task.id}" title="Mark as completed"><i class="fas fa-check"></i></button>`;
@@ -276,8 +403,16 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             buttonHtml = `<button class="completed-button disabled" disabled>completed</button>`;
         }
-
-
+        if (task.assigned_to) {
+             userInfoHtml += `<div style="font-size:0.75em; margin-top:2px; font-style:italic; opacity:0.9;">
+                <i class="fas fa-user-tag"></i> Atanan: ${getUserNameById(task.assigned_to)}
+             </div>`;
+        }
+        if (isAdmin()) {
+             userInfoHtml += `<div style="font-size:0.75em; margin-top:5px; color:var(--primary-color); font-weight:bold;">
+                <i class="fas fa-user-circle"></i> Sahibi: ${getUserNameById(task.user_id)}
+             </div>`;
+        }
         return `
             <div class="task-card ${color}-card${alertClass}" data-id="${task.id}" data-status="${task.status}">
                 <div class="card-header">
@@ -285,6 +420,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     ${dueDateHtml}
                 </div>
                 <p class="card-description">${task.description || 'No description provided.'}</p>
+                
+                ${attachmentsHtml} 
+                ${userInfoHtml}
+
                 <div class="card-footer">
                     <span class="card-category">Category: ${task.category || 'Uncategorized'}</span>
                     ${buttonHtml}
@@ -292,9 +431,63 @@ document.addEventListener('DOMContentLoaded', () => {
                 ${iconHtml}
             </div>
         `;
+
+        
+    };
+    //file upload
+
+    const uploadTaskFiles = async (taskId, fileInput) => {
+        const files = fileInput.files;
+        if (files.length === 0) return;
+
+        for (let i = 0; i < files.length; i++) {
+            const formData = new FormData();
+            formData.append('file', files[i]); 
+
+            try {
+                // Endpoint: /api/files/upload/{task_id}
+                await axios.post(`${API_BASE_URL}/files/upload/${taskId}`, formData, {
+                    headers: {
+                        ...getAuthHeaders(),
+                        'Content-Type': 'multipart/form-data'
+                    }
+                });
+            } catch (error) {
+                console.error(`Dosya yükleme hatası (${files[i].name}):`, error);
+                alert(`"${files[i].name}" yüklenemedi. Boyut sınırı (10MB) veya uzantı hatası olabilir.`);
+            }
+        }
     };
 
-    const getInlineEditFormHtml = (task) => {
+// Delet attachment
+    const deleteAttachment = async (attachmentId, btnElement) => {
+        if(!confirm("Dosyayı silmek istediğine emin misin?")) return;
+        
+        try {
+            await axios.delete(`${API_BASE_URL}/files/${attachmentId}`, { 
+                headers: getAuthHeaders() 
+            });
+            
+            if (btnElement) {
+                const row = btnElement.parentElement; 
+                if (row) {
+                    row.remove(); // Sadece o satırı yok et
+
+                }
+            } else {
+                const activePageItem = document.querySelector('.nav-item.active');
+                const activePage = activePageItem ? activePageItem.dataset.page : 'home';
+                await reloadCurrentPage(activePage);
+            }
+
+        } catch (error) {
+            console.error("Dosya silme hatası:", error);
+            alert("Dosya silinemedi.");
+        }
+    };
+
+    window.deleteAttachmentWrapper = deleteAttachment;
+    const getInlineEditFormHtml = async (task) => {
         const uniqueCategories = new Set(cachedTasks.map(t => t.category).filter(cat => cat && cat.trim() !== ''));
         const categoryOptions = Array.from(uniqueCategories).map(cat =>
             `<option value="${cat}" ${task.category === cat ? 'selected' : ''}>${cat}</option>`
@@ -310,10 +503,48 @@ document.addEventListener('DOMContentLoaded', () => {
         const formattedDate = task.dueDate || '';
         const formattedTime = task.dueTime ? task.dueTime.substring(0, 5) : '';
 
-        return `
+        // --- YENİ: Admin için Kullanıcı Listesi (Assign To) ---
+        let assignToHtml = '';
+        if (isAdmin()) {
+            const users = await fetchUsers();
+            const options = users.map(u => 
+                `<option value="${u.id}" ${task.assigned_to === u.id ? 'selected' : ''}>${u.name} (${u.email})</option>`
+            ).join('');
+            
+            assignToHtml = `
+                <div class="form-group">
+                    <label for="edit-assigned-${task.id}" style="color:var(--primary-color); font-weight:bold;">Atanan Kişi (Admin):</label>
+                    <select id="edit-assigned-${task.id}" style="width:100%; padding:8px; border:1px solid var(--primary-color); border-radius:5px;">
+                        <option value="">-- Atama Yok (Kendime) --</option>
+                        ${options}
+                    </select>
+                </div>
+            `;
+        }
+        
+        let existingFilesHtml = '';
+        if (task.attachments && task.attachments.length > 0) {
+            existingFilesHtml = `<div style="margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.05); border-radius: 5px;">
+                <label style="font-weight:bold; display:block; margin-bottom:5px;">Mevcut Dosyalar:</label>`;
+            
+            task.attachments.forEach(file => {
+                existingFilesHtml += `
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; font-size:0.9em;">
+                        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:80%;" title="${file.original_name}">${file.original_name}</span>
+                        <button type="button" onclick="window.deleteAttachmentWrapper(${file.id}, this)" style="color:#dc3545; background:none; border:none; cursor:pointer; padding:2px 5px;">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>`;
+            });
+            existingFilesHtml += `</div>`;
+        }   
+
+       return `
             <div class="task-edit-container">
                 <form id="task-edit-form-${task.id}" class="task-edit-form">
                     <div class="form-fields">
+                        ${assignToHtml}
+                        
                         <div class="form-group">
                             <label for="edit-title-${task.id}">Title</label>
                             <input type="text" id="edit-title-${task.id}" value="${task.title}" required minlength="3">
@@ -323,6 +554,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             <textarea id="edit-description-${task.id}">${task.description || ''}</textarea>
                         </div>
 
+                        <div class="form-group">
+                            ${existingFilesHtml}
+                            <label for="edit-files-${task.id}" style="cursor:pointer; font-weight:bold;">
+                                <i class="fas fa-paperclip"></i> Yeni Dosya Ekle (Çoklu Seçim):
+                            </label>
+                            <input type="file" id="edit-files-${task.id}" multiple style="margin-top:5px;">
+                        </div>
                         <div class="date-time-inputs">
                             <div class="form-group">
                                 <label for="edit-date-${task.id}">Due Date</label>
@@ -361,7 +599,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </form>
             </div>
-        `;
+        ```;
     };
 
 
@@ -376,6 +614,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return `<div class="error-message">Error loading tasks: ${error}</div>`;
         }
 
+        tasks = sortTasksByUser(tasks)
         let taskCardsHtml;
         if (tasks.length === 0) {
             taskCardsHtml = `<p style="text-align: center; margin-top: 30px; color: var(--primary-color);">No tasks found. Click "Add New Task" to begin.</p>`;
@@ -386,12 +625,29 @@ document.addEventListener('DOMContentLoaded', () => {
         const uniqueCategories = [...new Set(tasks.map(t => t.category || 'Uncategorized'))];
         const categoryOptions = uniqueCategories.map(cat => `<option value="${cat}">${cat}</option>`).join('');
 
+        let userFilterHtml = '';
+        if (isAdmin()) {
+            // cachedUsers listesi zaten fetchTasks ile dolmuştu
+            const userOptions = cachedUsers.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
+            
+            userFilterHtml = `
+                <div class="filter-group">
+                    <label for="user-filter">User</label>
+                    <select id="user-filter">
+                        <option value="all">All Users</option>
+                        ${userOptions}
+                    </select>
+                    <i class="fas fa-caret-down"></i>
+                </div>
+            `;
+        }
 
         return `
             <div class="dashboard-header">
                 <h2 class="dashboard-title">Dashboard</h2>
                 <div class="filters">
-                    <div class="filter-group">
+                    
+                    ${userFilterHtml} <div class="filter-group">
                         <label for="category">Category</label>
                         <select id="category">
                             <option value="all">-------------</option>
@@ -405,7 +661,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <option value="all">-------------</option>
                             <option value="pending">Not Started</option>
                             <option value="in_progress">In Progress</option>
-                            <option value="completed">completed</option>
+                            <option value="completed">Completed</option>
                         </select>
                         <i class="fas fa-caret-down"></i>
                     </div>
@@ -432,7 +688,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (task.status === 'completed') {
             colorClass = 'green-card';
-            statusText = 'completed';
+            statusText = 'Completed';
         } else if (task.status === 'in_progress') {
             colorClass = 'orange-card';
             statusText = 'In Progress';
@@ -449,6 +705,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const displayTime = task.dueTime ? task.dueTime.substring(0, 5) : 'N/A';
         const itemCategory = task.category ? task.category.toLowerCase().replace(/\s/g, '-') : 'uncategorized';
 
+        const ownerHtml = isAdmin() 
+            ? `<span style="font-size:0.85em; color:var(--primary-color); font-weight:600; margin-top:3px;">
+                 <i class="fas fa-user-circle"></i> Sahibi: ${getUserNameById(task.user_id)}
+               </span>` 
+            : '';
+
+        const assignedHtml = task.assigned_to 
+            ? `<span style="font-size:0.85em; font-style:italic; opacity:0.8; margin-top:2px;">
+                 <i class="fas fa-arrow-right"></i> Atanan: ${getUserNameById(task.assigned_to)}
+               </span>` 
+            : '';
 
         return `
             <div class="task-list-item ${colorClass}" data-id="${task.id}" data-status="${task.status}" data-category="${itemCategory}" data-title="${task.title}">
@@ -465,12 +732,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="task-meta">
                         <span class="category-info">Category: ${task.category || 'Uncategorized'}</span>
                         <span class="status-info">Status: ${statusText}</span>
+                        
+                        ${ownerHtml}
+                        ${assignedHtml}
                     </div>
 
                     <div class="task-actions">
                         <button class="delete-btn list-delete-btn" data-id="${task.id}">Delete</button>
                         <button class="edit-btn list-edit-btn" data-id="${task.id}">Edit</button>
-                        </div>
+                    </div>
                 </div>
             </div>
         `;
@@ -487,7 +757,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             return `<div class="error-message">Error loading tasks: ${error}</div>`;
         }
-
+        tasks = sortTasksByUser(tasks);
         const uniqueCategories = [...new Set(tasks.map(t => t.category))].filter(Boolean);
         const categoryOptions = uniqueCategories.map(cat => `<option value="${cat.toLowerCase().replace(/\s/g, '-')}">${cat}</option>`).join('');
 
@@ -613,6 +883,67 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
     };
 
+    const getAdminPanelContent = async () => {
+        if (!isAdmin()) return `<div class="error-message">Yetkiniz yok!</div>`;
+
+        try {
+            // Tüm kullanıcıları ve görevleri çekelim
+            const users = await fetchUsers(); // Bunu zaten yazmıştın
+            const tasks = await fetchTasks(); // Admin olduğumuz için tüm görevler gelecek
+            
+            let tableRows = users.map(user => {
+                // Bu kullanıcının görevlerini hesapla
+                const userTasks = tasks.filter(t => {
+                    // Eğer görev direkt bu kullanıcıya ATANMIŞSA.
+                    if (t.assigned_to === user.id) return true;
+
+                    // Eğer görev KİMSEYE ATANMAMIŞSA ve bu kullanıcı OLUŞTURDUYSA.
+                    if (!t.assigned_to && t.user_id === user.id) return true;
+
+                    // Diğer durumlarda benim iş yüküm değildir.
+                    return false;
+                }); 
+                const pendingCount = userTasks.filter(t => t.status !== 'completed').length;
+                const completedCount = userTasks.filter(t => t.status === 'completed').length;
+
+                return `
+                    <tr>
+                        <td>#${user.id}</td>
+                        <td><strong>${user.name}</strong></td>
+                        <td>${user.email}</td>
+                        <td><span style="color:${user.role === 'admin' ? 'red' : 'blue'}">${user.role.toUpperCase()}</span></td>
+                        <td>${pendingCount} Bekleyen / ${completedCount} Tamamlanan</td>
+                    </tr>
+                `;
+            }).join('');
+
+            return `
+                <div class="tasks-container">
+                    <div class="dashboard-header">
+                        <h2 class="dashboard-title">Admin Paneli 🛡️</h2>
+                    </div>
+                    <div style="overflow-x:auto;">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>İsim</th>
+                                    <th>Email</th>
+                                    <th>Rol</th>
+                                    <th>İş Yükü</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${tableRows}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        } catch (error) {
+            return `<div class="error-message">Veriler yüklenemedi: ${error}</div>`;
+        }
+    };
     const statusColors = {
         'pending': 'rgba(150, 90, 250, 0.7)',
         'in_progress': 'rgba(255, 165, 0, 0.7)',
@@ -742,30 +1073,22 @@ document.addEventListener('DOMContentLoaded', () => {
         if (form) {
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
+                console.log("1. Kaydet butonuna basıldı.");
 
                 const title = document.getElementById('task-title').value.trim();
                 const description = document.getElementById('task-description').value.trim();
                 const dueDate = document.getElementById('task-date').value.trim();
                 const dueTime = document.getElementById('task-time').value.trim();
                 const category = document.getElementById('task-category').value.trim() || null;
+                
+                // Admin ataması kontrolü
+                const assignedToSelect = document.getElementById('task-assigned-to');
+                const assignedTo = assignedToSelect ? assignedToSelect.value : null;
 
-                if (category && category.length > MAX_CATEGORY_LENGTH) {
-                    alert(`Category name is too long. Must be ${MAX_CATEGORY_LENGTH} characters or less.`);
-                    return;
-                }
+                // Validation (Frontend)
                 if (!title || title.length < 3) {
-                    alert('Task title must be at least 3 characters long.');
-                    return;
-                }
-
-                if (title.length > MAX_TITLE_LENGTH) {
-                    alert(`Title is too long. Max ${MAX_TITLE_LENGTH} characters.`);
-                    return;
-                }
-
-                if (description && description.length > MAX_DESCRIPTION_LENGTH) {
-                    alert(`Description is too long. Max ${MAX_DESCRIPTION_LENGTH} characters.`);
-                    return;
+                     alert('Task title must be at least 3 characters long.');
+                     return;
                 }
 
                 const newTaskData = {
@@ -774,19 +1097,38 @@ document.addEventListener('DOMContentLoaded', () => {
                     category: category,
                     status: 'pending',
                     dueDate: dueDate || null,
-                    dueTime: (dueTime ? dueTime + ":00" : null)
+                    dueTime: (dueTime ? dueTime + ":00" : null),
+                    assigned_to: assignedTo ? parseInt(assignedTo) : null 
                 };
 
                 try {
-                    await createTask(newTaskData);
+                    // 1. Önce Görevi Oluştur
+                    console.log("2. Görev oluşturma isteği gönderiliyor...");
+                    const createdTask = await createTask(newTaskData);
+                    console.log("3. Görev oluşturuldu! ID:", createdTask.id);
+                    
+                    // 2. Şimdi Varsa Dosyaları Yükle
+                    const fileInput = document.getElementById('task-files');
+                    
+                    if (fileInput) {
+                        if (fileInput.files.length > 0) {
+                            console.log("4. Dosya yükleme fonksiyonu çağrılıyor...");
+                            await uploadTaskFiles(createdTask.id, fileInput);
+                            console.log("5. Dosya yükleme tamamlandı.");
+                        } else {
+                            console.log("4b. Dosya seçilmedi.");
+                        }
+                    }
+
                     alert(`Task "${title}" created successfully!`);
                     await resetCard();
                 } catch (error) {
+                    console.error("HATA OLUŞTU:", error);
                     alert(`ERROR: Failed to create task. Details: ${error}`);
                 }
             });
         }
-
+        
         if (cancelButton) {
             cancelButton.addEventListener('click', resetCard);
         }
@@ -795,6 +1137,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const setupDashboardInteractions = () => {
         const categorySelect = document.getElementById('category');
         const statusSelect = document.getElementById('status');
+        const userSelect = document.getElementById('user-filter');
         const addTaskCard = document.querySelector('[data-action="add-task"]');
         const taskGrid = document.getElementById('task-grid');
 
@@ -806,16 +1149,25 @@ document.addEventListener('DOMContentLoaded', () => {
         const applyDashboardFilters = () => {
             const selectedCategory = categorySelect.value;
             const selectedStatus = statusSelect.value;
+            const selectedUser = userSelect ? userSelect.value : 'all';
             const taskCards = taskGrid.querySelectorAll('.task-card:not(.empty-card)');
 
             taskCards.forEach(card => {
                 const itemCategory = card.querySelector('.card-category').textContent.replace('Category: ', '').trim();
                 const itemStatus = card.getAttribute('data-status');
 
+                const taskId = parseInt(card.getAttribute('data-id'));
+                const taskData = cachedTasks.find(t => t.id === taskId);
+
                 const categoryMatch = selectedCategory === 'all' || itemCategory === selectedCategory;
                 const statusMatch = (selectedStatus === 'all' && itemStatus !== 'completed') || itemStatus === selectedStatus;
 
-                if (categoryMatch && statusMatch) {
+                let userMatch = true;
+                if (selectedUser !== 'all' && taskData) {
+                    userMatch = (taskData.user_id == selectedUser) || (taskData.assigned_to == selectedUser);
+                }
+
+                if (categoryMatch && statusMatch && userMatch) {
                     card.style.display = 'flex';
                 } else {
                     card.style.display = 'none';
@@ -825,14 +1177,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (categorySelect) categorySelect.addEventListener('change', applyDashboardFilters);
         if (statusSelect) statusSelect.addEventListener('change', applyDashboardFilters);
-
+        if (userSelect) userSelect.addEventListener('change', applyDashboardFilters);
         if (addTaskCard) {
-            const addCardClickListener = function () {
+            const addCardClickListener = async function () { 
                 if (document.querySelector('.task-creation-form')) return;
                 addTaskCard.classList.remove('empty-card');
                 addTaskCard.classList.add('primary-card', 'active-form');
                 addTaskCard.setAttribute('data-action', 'add-task-active');
-                addTaskCard.innerHTML = getTaskFormHtml();
+                
+                addTaskCard.innerHTML = await getTaskFormHtml(); 
+                
                 setupAddTaskInteractionsOnCard(addTaskCard);
                 addTaskCard.removeEventListener('click', addCardClickListener);
             };
@@ -943,7 +1297,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
-        const handleEditTask = (id) => {
+        const handleEditTask = async (id) => {
             const task = findTask(id);
             const taskItem = document.querySelector(`.task-list-item[data-id="${id}"]`);
 
@@ -951,64 +1305,104 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (task && taskItem) {
                 taskItem.setAttribute('data-original-html', taskItem.innerHTML);
-
                 taskItem.classList.add('editing');
-                taskItem.innerHTML = getInlineEditFormHtml(task);
+
+                // --- FORM HTML OLUŞTURUCU (İÇ FONKSİYON) ---
+                const generateEditHtml = async (taskData) => {
+                    const uniqueCategories = new Set(cachedTasks.map(t => t.category).filter(cat => cat && cat.trim() !== ''));
+                    const categoryOptions = Array.from(uniqueCategories).map(cat =>
+                        `<option value="${cat}" ${taskData.category === cat ? 'selected' : ''}>${cat}</option>`
+                    ).join('');
+
+                    const statusOptions = ['pending', 'in_progress', 'completed'].map(status => {
+                        let displayStatus = status.charAt(0).toUpperCase() + status.slice(1).replace('-', ' ');
+                        if (status === 'pending') displayStatus = 'Not Started';
+                        return `<option value="${status}" ${taskData.status === status ? 'selected' : ''}>${displayStatus}</option>`;
+                    }).join('');
+
+                    // Dosya Listesi
+                    let filesHtml = '';
+                    if (taskData.attachments && taskData.attachments.length > 0) {
+                        filesHtml = `<div style="margin:10px 0; padding:5px; background:#f0f0f0; border-radius:5px;">`;
+                        taskData.attachments.forEach(f => {
+                            filesHtml += `<div style="display:flex; justify-content:space-between; font-size:0.85em; margin-bottom:2px;">
+                                <span>${f.original_name}</span>
+                                <button type="button" onclick="window.deleteAttachmentWrapper(${f.id}, this)" style="color:red; border:none; cursor:pointer;"><i class="fas fa-trash"></i></button>
+                            </div>`;
+                        });
+                        filesHtml += `</div>`;
+                    }
+
+                    // Admin Atama Listesi
+                    let assignHtml = '';
+                    if (isAdmin()) {
+                        const users = await fetchUsers();
+                        const options = users.map(u => 
+                            `<option value="${u.id}" ${taskData.assigned_to === u.id ? 'selected' : ''}>${u.name}</option>`
+                        ).join('');
+                        assignHtml = `<div class="form-group"><label>Atanan:</label><select id="edit-assigned-${taskData.id}">${options}<option value="">Atama Yok</option></select></div>`;
+                    }
+
+                    return `
+                        <form id="task-edit-form-${taskData.id}" class="task-edit-form" style="padding:15px; background:white; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.1);">
+                            <div class="form-group"><label>Title</label><input type="text" id="edit-title-${taskData.id}" value="${taskData.title}" required></div>
+                            <div class="form-group"><label>Desc</label><textarea id="edit-description-${taskData.id}">${taskData.description || ''}</textarea></div>
+                            ${filesHtml}
+                            <div class="form-group"><label>Yeni Dosya:</label><input type="file" id="edit-files-${taskData.id}" multiple></div>
+                            ${assignHtml}
+                            <div class="form-group"><label>Status</label><select id="edit-status-${taskData.id}">${statusOptions}</select></div>
+                            <div class="task-actions" style="margin-top:10px; display:flex; gap:10px;">
+                                <button type="submit" class="save-edit-btn" style="background:green; color:white; padding:5px 10px; border:none; border-radius:4px; cursor:pointer;">Save</button>
+                                <button type="button" class="cancel-edit-btn" style="background:gray; color:white; padding:5px 10px; border:none; border-radius:4px; cursor:pointer;">Cancel</button>
+                            </div>
+                        </form>
+                    `;
+                };
+                // ---------------------------------------------
+
+                taskItem.innerHTML = await generateEditHtml(task);
 
                 const form = document.getElementById(`task-edit-form-${id}`);
-                const originalTaskHtml = taskItem.getAttribute('data-original-html');
-
+                
                 form.addEventListener('submit', async (e) => {
                     e.preventDefault();
-
-                    const newTitle = document.getElementById(`edit-title-${id}`).value.trim();
-                    const newDescription = document.getElementById(`edit-description-${id}`).value.trim();
-                    const newDate = document.getElementById(`edit-date-${id}`).value.trim();
-                    const newTime = document.getElementById(`edit-time-${id}`).value.trim();
-                    const newCategory = document.getElementById(`edit-category-${id}`).value.trim() || null;
-                    const newStatus = document.getElementById(`edit-status-${id}`).value.trim();
-
-                    if (newCategory && newCategory.length > MAX_CATEGORY_LENGTH) {
-                        alert(`Category name is too long. Must be ${MAX_CATEGORY_LENGTH} characters or less.`);
-                        return;
+                    
+                    const titleVal = document.getElementById(`edit-title-${id}`).value;
+                    const descVal = document.getElementById(`edit-description-${id}`).value;
+                    const statusVal = document.getElementById(`edit-status-${id}`).value;
+                    
+                    let assignedToVal = task.assigned_to;
+                    if (isAdmin()) {
+                        const assignInput = document.getElementById(`edit-assigned-${id}`);
+                        if (assignInput) assignedToVal = assignInput.value ? parseInt(assignInput.value) : null;
                     }
 
-                    if (newTitle.length < 3) {
-                        alert('Title must be at least 3 characters.');
-                        return;
-                    }
-
-                    if (newTitle.length > MAX_TITLE_LENGTH) {
-                        alert(`Title is too long. Max ${MAX_TITLE_LENGTH} characters.`);
-                        return;
-                    }
-
-                    if (newDescription && newDescription.length > MAX_DESCRIPTION_LENGTH) {
-                        alert(`Description is too long. Max ${MAX_DESCRIPTION_LENGTH} characters.`);
-                        return;
-                    }
-                    const updatePayload = {
-                        title: newTitle,
-                        description: newDescription || null,
-                        category: newCategory,
-                        status: newStatus,
-                        dueDate: newDate || null,
-                        dueTime: (newTime ? newTime + ":00" : null)
+                    const payload = {
+                        title: titleVal,
+                        description: descVal,
+                        status: statusVal,
+                        assigned_to: assignedToVal
+                        // ... diğer alanlar (tarih vb.) buraya eklenebilir ...
                     };
 
                     try {
-                        await updateTask(id, updatePayload);
-                        alert(`Task "${newTitle}" successfully updated.`);
+                        await updateTask(id, payload);
+                        
+                        const fileInput = document.getElementById(`edit-files-${id}`);
+                        if (fileInput.files.length > 0) {
+                            await uploadTaskFiles(id, fileInput);
+                        }
+                        
+                        alert("Task updated!");
                         await reloadCurrentPage('tasks');
-                    } catch (error) {
-                        alert(`ERROR: Failed to update task. Details: ${error}`);
+                    } catch (err) {
+                        alert("Update failed: " + err);
                     }
                 });
 
-                const cancelButton = form.querySelector('.cancel-edit-btn');
-                cancelButton.addEventListener('click', async () => {
+                form.querySelector('.cancel-edit-btn').addEventListener('click', () => {
+                    taskItem.innerHTML = taskItem.getAttribute('data-original-html');
                     taskItem.classList.remove('editing');
-                    await reloadCurrentPage('tasks');
                 });
             }
         };
@@ -1101,7 +1495,66 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     };
+    //download files
+// DOSYA TÜRÜNÜ BELİRLEME YARDIMCISI
+    const getMimeType = (fileName) => {
+        const extension = fileName.split('.').pop().toLowerCase();
+        const mimeTypes = {
+            'pdf': 'application/pdf',
+            'jpg': 'image/jpeg',
+            'png': 'image/png',
+            'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        };
+        // Eğer listede yoksa genel binary türünü döndür
+        return mimeTypes[extension] || 'application/octet-stream';
+    };
 
+    // DÜZELTİLMİŞ İNDİRME/ÖNİZLEME FONKSİYONU
+    const downloadFileWrapper = async (event, fileId, fileName) => {
+        event.preventDefault();
+        
+        try {
+            const response = await axios.get(`${API_BASE_URL}/files/download/${fileId}`, {
+                headers: getAuthHeaders(),
+                responseType: 'blob' 
+            });
+
+            // 1. Dosya türünü isminden manuel olarak buluyoruz (En garantisi bu)
+            const mimeType = getMimeType(fileName);
+
+            // 2. Blob'u bu tür ile oluşturuyoruz (Tarayıcı artık ne olduğunu biliyor)
+            const blob = new Blob([response.data], { type: mimeType });
+            const url = window.URL.createObjectURL(blob);
+
+            const extension = fileName.split('.').pop().toLowerCase();
+            const previewableExtensions = ['pdf', 'jpg','png'];
+
+            if (previewableExtensions.includes(extension)) {
+                // A) ÖNİZLEME: Yeni sekmede aç
+                // Tarayıcı artık bunun bir PDF/Resim olduğunu bildiği için indirmeyip gösterecek.
+                window.open(url, '_blank');
+            } else {
+                // B) İNDİRME: Klasik yöntem (İsim düzgün çıkar)
+                const link = document.createElement('a');
+                link.href = url;
+                link.setAttribute('download', fileName); // İsmi buradan zorluyoruz
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+            }
+
+            // Temizlik (Hemen silmiyoruz ki sekme açılabilsin)
+            setTimeout(() => window.URL.revokeObjectURL(url), 10000); 
+
+        } catch (error) {
+            console.error("Dosya işlem hatası:", error);
+            alert("Dosya alınamadı.");
+        }
+    };
+
+    window.downloadFileWrapper = downloadFileWrapper;
+    
     const loadContent = async (pageName) => {
 
         if (pageName === 'home') {
@@ -1112,7 +1565,10 @@ document.addEventListener('DOMContentLoaded', () => {
             setupTasksInteractions();
         } else if (pageName === 'stats') {
             mainContent.innerHTML = await getStatisticsContent();
+        }else if (pageName === 'admin') {
+            mainContent.innerHTML = await getAdminPanelContent();
         }
+        
         else {
             mainContent.innerHTML = `
             <h2>${pageName.charAt(0).toUpperCase() + pageName.slice(1)} Page</h2>
@@ -1157,6 +1613,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     checkAndClearExpiredToken();
+    updateAdminUI();
 
     if (!accessToken) {
         document.querySelector('[data-page="home"]').classList.add('active');
