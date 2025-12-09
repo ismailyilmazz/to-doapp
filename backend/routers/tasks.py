@@ -124,6 +124,9 @@ def update_task(id: int, task_update: models.TaskUpdate, current_user: dict = De
         if current_user['role'] != 'admin':
             if existing_task['user_id'] != current_user['id'] and existing_task['assigned_to'] != current_user['id']:
                  raise HTTPException(status_code=403, detail="Not authorized to update this task")
+            
+        if current_user['role'] != 'admin':
+            task_update.assigned_to = existing_task['assigned_to']
         
         update_query = """
         UPDATE tasks SET title=%s, description=%s, category=%s, status=%s, dueDate=%s, dueTime=%s, assigned_to=%s
