@@ -8,7 +8,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const MAX_DESCRIPTION_LENGTH = 250;
     let cachedUsers = [];
 
-    //task sort
+    const statusColors = {
+        'pending': 'rgba(150, 90, 250, 0.7)',     
+        'in_progress': 'rgba(255, 165, 0, 0.7)',  
+        'completed': 'rgba(60, 179, 113, 0.7)'    
+    };
+    //task sort 
     const sortTasksByUser = (taskList) => {
         return taskList.sort((a, b) => {
             // Görevin üzerinde kim varsa (Atanan yoksa Sahibi) onun ismini al
@@ -326,7 +331,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     const renderTaskCard = (task) => {
-        console.log("Gelen Görev:", task.title, "Dosyalar:", task.attachments);
         let color, statusText;
         let alertClass = '';
         let iconHtml = '';
@@ -496,7 +500,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const statusOptions = ['pending', 'in_progress', 'completed'].map(status => {
             let displayStatus = status.charAt(0).toUpperCase() + status.slice(1).replace('-', ' ');
             if (status === 'pending') displayStatus = 'Not Started';
-
             return `<option value="${status}" ${task.status === status ? 'selected' : ''}>${displayStatus}</option>`;
         }).join('');
 
@@ -506,22 +509,28 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- YENİ: Admin için Kullanıcı Listesi (Assign To) ---
         let assignToHtml = '';
         if (isAdmin()) {
-            const users = await fetchUsers();
-            const options = users.map(u => 
-                `<option value="${u.id}" ${task.assigned_to === u.id ? 'selected' : ''}>${u.name} (${u.email})</option>`
-            ).join('');
-            
-            assignToHtml = `
-                <div class="form-group">
-                    <label for="edit-assigned-${task.id}" style="color:var(--primary-color); font-weight:bold;">Atanan Kişi (Admin):</label>
-                    <select id="edit-assigned-${task.id}" style="width:100%; padding:8px; border:1px solid var(--primary-color); border-radius:5px;">
-                        <option value="">-- Atama Yok (Kendime) --</option>
-                        ${options}
-                    </select>
-                </div>
-            `;
+            try {
+                // Listeyi tekrar çekmek yerine cachedUsers varsa onu kullanalım, yoksa çekelim
+                let users = cachedUsers;
+                if (users.length === 0) users = await fetchUsers();
+                
+                const options = users.map(u => 
+                    `<option value="${u.id}" ${task.assigned_to === u.id ? 'selected' : ''}>${u.name} (${u.email})</option>`
+                ).join('');
+                
+                assignToHtml = `
+                    <div class="form-group">
+                        <label style="color:var(--primary-color); font-weight:bold;">Atanan Kişi (Admin):</label>
+                        <select id="edit-assigned-${task.id}" class="styled-select" style="color:black;">
+                            <option value="">-- Atama Yok (Kendime) --</option>
+                            ${options}
+                        </select>
+                    </div>
+                `;
+            } catch (e) { console.error(e); }
         }
         
+        // --- Dosya Listesi ---
         let existingFilesHtml = '';
         if (task.attachments && task.attachments.length > 0) {
             existingFilesHtml = `<div style="margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.05); border-radius: 5px;">
@@ -546,42 +555,43 @@ document.addEventListener('DOMContentLoaded', () => {
                         ${assignToHtml}
                         
                         <div class="form-group">
-                            <label for="edit-title-${task.id}">Title</label>
+                            <label>Title</label>
                             <input type="text" id="edit-title-${task.id}" value="${task.title}" required minlength="3">
                         </div>
                         <div class="form-group">
-                            <label for="edit-description-${task.id}">Description</label>
+                            <label>Description</label>
                             <textarea id="edit-description-${task.id}">${task.description || ''}</textarea>
                         </div>
 
                         <div class="form-group">
                             ${existingFilesHtml}
-                            <label for="edit-files-${task.id}" style="cursor:pointer; font-weight:bold;">
-                                <i class="fas fa-paperclip"></i> Yeni Dosya Ekle (Çoklu Seçim):
+                            <label style="cursor:pointer; font-weight:bold;">
+                                <i class="fas fa-paperclip"></i> Yeni Dosya Ekle:
                             </label>
                             <input type="file" id="edit-files-${task.id}" multiple style="margin-top:5px;">
                         </div>
+
                         <div class="date-time-inputs">
                             <div class="form-group">
-                                <label for="edit-date-${task.id}">Due Date</label>
+                                <label>Due Date</label>
                                 <input type="date" id="edit-date-${task.id}" value="${formattedDate}">
                             </div>
                             <div class="form-group">
-                                <label for="edit-time-${task.id}">Time</label>
+                                <label>Time</label>
                                 <input type="time" id="edit-time-${task.id}" value="${formattedTime}">
                             </div>
                         </div>
 
                         <div class="category-status-inputs">
                             <div class="form-group">
-                                <label for="edit-category-${task.id}">Category</label>
-                                <input list="category-list-${task.id}" id="edit-category-${task.id}" name="task-category" placeholder="Select or type Category" value="${task.category || ''}">
+                                <label>Category</label>
+                                <input list="category-list-${task.id}" id="edit-category-${task.id}" placeholder="Select or type Category" value="${task.category || ''}">
                                 <datalist id="category-list-${task.id}">
                                     ${categoryOptions}
                                 </datalist>
                             </div>
                             <div class="form-group">
-                                <label for="edit-status-${task.id}">Status</label>
+                                <label>Status</label>
                                 <select id="edit-status-${task.id}" required>
                                     ${statusOptions}
                                 </select>
@@ -590,16 +600,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
 
                     <div class="task-actions edit-actions">
-                        <button type="button" class="list-edit-btn compact-btn cancel-edit-btn" data-id="${task.id}" title="Cancel Edit">
+                        <button type="button" class="list-edit-btn compact-btn cancel-edit-btn" title="Cancel">
                             <i class="fas fa-times"></i> Cancel
                         </button>
-                        <button type="submit" class="list-edit-btn compact-btn save-edit-btn" data-id="${task.id}" title="Save Changes">
+                        <button type="submit" class="list-edit-btn compact-btn save-edit-btn" title="Save">
                             <i class="fas fa-save"></i> Save
                         </button>
                     </div>
                 </form>
             </div>
-        ```;
+        `;
     };
 
 
@@ -717,12 +727,36 @@ document.addEventListener('DOMContentLoaded', () => {
                </span>` 
             : '';
 
+        let attachmentsHtml = '';
+        if (task.attachments && task.attachments.length > 0) {
+            attachmentsHtml = `<div class="task-attachments-list" style="margin-top:10px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.3);">`;
+            
+            task.attachments.forEach(file => {
+                const sizeStr = formatFileSize(file.file_size);
+                
+                attachmentsHtml += `
+                    <div style="display:inline-flex; align-items:center; background:rgba(0,0,0,0.15); border-radius:4px; padding:4px 8px; margin-right:5px; margin-bottom:5px; font-size:0.85em;">
+                        <a href="#" onclick="window.downloadFileWrapper(event, ${file.id}, '${file.original_name}')" title="Görüntüle/İndir (${sizeStr})" style="color:inherit; text-decoration:none; display:flex; align-items:center; gap:5px; margin-right:8px;">
+                            <i class="fas fa-paperclip"></i> 
+                            <span style="max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${file.original_name}</span>
+                        </a>
+                        <button onclick="window.deleteAttachmentWrapper(${file.id}, this)" title="Dosyayı Sil" style="background:none; border:none; color:#ffb3b3; cursor:pointer; padding:0; font-size:1em;">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                `;
+            });
+            attachmentsHtml += `</div>`;
+        }
         return `
             <div class="task-list-item ${colorClass}" data-id="${task.id}" data-status="${task.status}" data-category="${itemCategory}" data-title="${task.title}">
                 <div class="task-details">
                     <h3 class="task-title">${task.title} ${alertIcon}</h3>
                     <p class="task-description">${task.description || 'No description provided.'}</p>
-                    <div class="task-date-info">
+                    
+                    ${attachmentsHtml}
+
+                    <div class="task-date-info" style="margin-top:10px;">
                         <span class="date-label">Due Date: ${displayDate}</span>
                         <span class="time-label">Time: ${displayTime}</span>
                     </div>
@@ -887,32 +921,37 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!isAdmin()) return `<div class="error-message">Yetkiniz yok!</div>`;
 
         try {
-            // Tüm kullanıcıları ve görevleri çekelim
-            const users = await fetchUsers(); // Bunu zaten yazmıştın
-            const tasks = await fetchTasks(); // Admin olduğumuz için tüm görevler gelecek
-            
+            const users = await fetchUsers();
+            const tasks = await fetchTasks();
+            cachedTasks = tasks;
+
             let tableRows = users.map(user => {
-                // Bu kullanıcının görevlerini hesapla
-                const userTasks = tasks.filter(t => {
-                    // Eğer görev direkt bu kullanıcıya ATANMIŞSA.
-                    if (t.assigned_to === user.id) return true;
-
-                    // Eğer görev KİMSEYE ATANMAMIŞSA ve bu kullanıcı OLUŞTURDUYSA.
-                    if (!t.assigned_to && t.user_id === user.id) return true;
-
-                    // Diğer durumlarda benim iş yüküm değildir.
-                    return false;
-                }); 
+                // İş yükü hesaplama (Aynen koruyoruz)
+                const userTasks = tasks.filter(t => (t.assigned_to === user.id) || (!t.assigned_to && t.user_id === user.id));
                 const pendingCount = userTasks.filter(t => t.status !== 'completed').length;
                 const completedCount = userTasks.filter(t => t.status === 'completed').length;
 
                 return `
-                    <tr>
+                    <tr class="user-row" id="user-row-${user.id}">
                         <td>#${user.id}</td>
                         <td><strong>${user.name}</strong></td>
                         <td>${user.email}</td>
                         <td><span style="color:${user.role === 'admin' ? 'red' : 'blue'}">${user.role.toUpperCase()}</span></td>
                         <td>${pendingCount} Bekleyen / ${completedCount} Tamamlanan</td>
+                        <td>
+                            <button class="compact-btn" style="background-color:var(--primary-color); color:white; border:none; cursor:pointer;" 
+                                onclick="window.toggleAdminUserTasks(${user.id}, this)">
+                                <i class="fas fa-chevron-down"></i> Görevleri Aç
+                            </button>
+                        </td>
+                    </tr>
+                    
+                    <tr id="detail-row-${user.id}" class="admin-details-row hidden">
+                        <td colspan="6">
+                            <div class="admin-task-container" id="task-container-${user.id}">
+                                <p style="text-align:center; color:gray;">Yükleniyor...</p>
+                            </div>
+                        </td>
                     </tr>
                 `;
             }).join('');
@@ -922,7 +961,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="dashboard-header">
                         <h2 class="dashboard-title">Admin Paneli 🛡️</h2>
                     </div>
-                    <div style="overflow-x:auto;">
+                    
+                    <div id="admin-users-view" style="overflow-x:auto;">
                         <table class="admin-table">
                             <thead>
                                 <tr>
@@ -931,11 +971,10 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <th>Email</th>
                                     <th>Rol</th>
                                     <th>İş Yükü</th>
+                                    <th>İşlemler</th>
                                 </tr>
                             </thead>
-                            <tbody>
-                                ${tableRows}
-                            </tbody>
+                            <tbody id="admin-table-body">${tableRows}</tbody>
                         </table>
                     </div>
                 </div>
@@ -944,12 +983,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return `<div class="error-message">Veriler yüklenemedi: ${error}</div>`;
         }
     };
-    const statusColors = {
-        'pending': 'rgba(150, 90, 250, 0.7)',
-        'in_progress': 'rgba(255, 165, 0, 0.7)',
-        'completed': 'rgba(60, 179, 113, 0.7)'
-    };
-
 
 
 
@@ -985,16 +1018,19 @@ document.addEventListener('DOMContentLoaded', () => {
             ]
         };
     };
-
+    
     const renderTaskChart = (chartData) => {
         const ctx = document.getElementById('task-chart');
 
         if (!ctx) return;
 
+        // Eski grafik varsa mutlaka yok et
         if (taskChartInstance) {
             taskChartInstance.destroy();
+            taskChartInstance = null; // Garanti olsun
         }
 
+        // Yeni grafiği oluştur
         taskChartInstance = new Chart(ctx, {
             type: 'bar',
             data: {
@@ -1007,32 +1043,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 scales: {
                     x: {
                         stacked: true,
-                        title: {
-                            display: true,
-                            text: 'Task Categories'
-                        }
+                        title: { display: true, text: 'Task Categories' }
                     },
                     y: {
                         stacked: true,
                         beginAtZero: true,
-                        title: {
-                            display: true,
-                            text: 'Number of Tasks'
-                        },
-                        ticks: {
-                            precision: 0,
-                            stepSize: 1
-                        }
+                        title: { display: true, text: 'Number of Tasks' },
+                        ticks: { precision: 0, stepSize: 1 }
                     }
                 },
                 plugins: {
-                    legend: {
-                        display: true
-                    },
-                    title: {
-                        display: true,
-                        text: `Task Breakdown by Category and Status`
-                    }
+                    legend: { display: true },
+                    title: { display: true, text: `Task Breakdown by Category and Status` }
                 }
             }
         });
@@ -1073,7 +1095,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (form) {
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
-                console.log("1. Kaydet butonuna basıldı.");
 
                 const title = document.getElementById('task-title').value.trim();
                 const description = document.getElementById('task-description').value.trim();
@@ -1081,14 +1102,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 const dueTime = document.getElementById('task-time').value.trim();
                 const category = document.getElementById('task-category').value.trim() || null;
                 
-                // Admin ataması kontrolü
+            
                 const assignedToSelect = document.getElementById('task-assigned-to');
                 const assignedTo = assignedToSelect ? assignedToSelect.value : null;
 
-                // Validation (Frontend)
+                
                 if (!title || title.length < 3) {
                      alert('Task title must be at least 3 characters long.');
                      return;
+                }
+                if (title.length > MAX_TITLE_LENGTH) { 
+                    alert(`Title is too long. Max ${MAX_TITLE_LENGTH} characters.`); 
+                    return; 
+                }
+                if (description && description.length > MAX_DESCRIPTION_LENGTH) { 
+                    alert(`Description is too long. Max ${MAX_DESCRIPTION_LENGTH} characters.`); 
+                    return; 
+                }
+                if (category && category.length > MAX_CATEGORY_LENGTH) { 
+                    alert(`Category name is too long. Max ${MAX_CATEGORY_LENGTH} characters.`); 
+                    return; 
                 }
 
                 const newTaskData = {
@@ -1102,21 +1135,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
 
                 try {
-                    // 1. Önce Görevi Oluştur
-                    console.log("2. Görev oluşturma isteği gönderiliyor...");
                     const createdTask = await createTask(newTaskData);
-                    console.log("3. Görev oluşturuldu! ID:", createdTask.id);
                     
-                    // 2. Şimdi Varsa Dosyaları Yükle
                     const fileInput = document.getElementById('task-files');
                     
                     if (fileInput) {
                         if (fileInput.files.length > 0) {
-                            console.log("4. Dosya yükleme fonksiyonu çağrılıyor...");
                             await uploadTaskFiles(createdTask.id, fileInput);
-                            console.log("5. Dosya yükleme tamamlandı.");
                         } else {
-                            console.log("4b. Dosya seçilmedi.");
                         }
                     }
 
@@ -1131,6 +1157,117 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (cancelButton) {
             cancelButton.addEventListener('click', resetCard);
+        }
+    };
+
+    const handleDeleteTask = async (id) => {
+        const taskToDelete = cachedTasks.find(t => t.id === id);
+        if (!taskToDelete) { alert("Task not found."); return; }
+
+        if (confirm(`Are you sure you want to delete this task?\n\n"${taskToDelete.title}"`)) {
+            try {
+                await deleteTask(id);
+                const taskElements = document.querySelectorAll(`.task-list-item[data-id="${id}"]`);
+                taskElements.forEach(el => el.remove());
+                
+                cachedTasks = cachedTasks.filter(task => task.id !== id);
+                alert(`Task deleted.`);
+            } catch (error) {
+                alert(`ERROR: ${error}`);
+                const activePage = document.querySelector('.nav-item.active')?.dataset.page || 'home';
+                await reloadCurrentPage(activePage);
+            }
+        }
+    };
+
+    const handleEditTask = async (id) => {
+        const task = cachedTasks.find(t => t.id === id);
+        const taskItem = document.querySelector(`.task-list-item[data-id="${id}"]`);
+
+        if (!task || !taskItem || taskItem.classList.contains('editing')) return;
+
+        taskItem.setAttribute('data-original-html', taskItem.innerHTML);
+        taskItem.classList.add('editing');
+        
+        taskItem.innerHTML = await getInlineEditFormHtml(task); 
+
+        const form = document.getElementById(`task-edit-form-${id}`);
+        
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();    
+            const newTitle = document.getElementById(`edit-title-${id}`).value.trim();
+            const newDescription = document.getElementById(`edit-description-${id}`).value.trim();
+            const newDate = document.getElementById(`edit-date-${id}`).value;
+            const newTime = document.getElementById(`edit-time-${id}`).value;
+            const newCategory = document.getElementById(`edit-category-${id}`).value.trim() || null;
+            const newStatus = document.getElementById(`edit-status-${id}`).value;
+            
+            let assignedTo = task.assigned_to;
+            if (isAdmin()) {
+                const assignSelect = document.getElementById(`edit-assigned-${id}`);
+                if (assignSelect) {
+                    assignedTo = assignSelect.value ? parseInt(assignSelect.value) : null;
+                }
+            }
+
+            if (newTitle.length < 3) { 
+                alert('Title must be at least 3 characters.'); 
+                return; 
+            }
+            if (newTitle.length > MAX_TITLE_LENGTH) { 
+                alert(`Title is too long. Max ${MAX_TITLE_LENGTH} characters.`); 
+                return; 
+            }
+            if (newDescription && newDescription.length > MAX_DESCRIPTION_LENGTH) { 
+                alert(`Description is too long. Max ${MAX_DESCRIPTION_LENGTH} characters.`); 
+                return; 
+            }
+            if (newCategory && newCategory.length > MAX_CATEGORY_LENGTH) { 
+                alert(`Category name is too long. Max ${MAX_CATEGORY_LENGTH} characters.`); 
+                return; 
+            }
+
+            const updatePayload = {
+                title: newTitle,
+                description: newDescription || null,
+                category: newCategory,
+                status: newStatus,
+                dueDate: newDate || null,
+                dueTime: (newTime ? newTime + ":00" : null),
+                assigned_to: assignedTo
+            };
+
+            try {
+                await updateTask(id, updatePayload);
+
+                const fileInput = document.getElementById(`edit-files-${id}`);
+                if (fileInput && fileInput.files.length > 0) {
+                    await uploadTaskFiles(id, fileInput);
+                }
+
+                alert(`Task "${newTitle}" updated!`);
+                
+                const activePageItem = document.querySelector('.nav-item.active');
+                const activePage = activePageItem ? activePageItem.dataset.page : 'home';
+                
+                if (activePage === 'admin') {
+                    await reloadCurrentPage('admin');
+                } else {
+                    await reloadCurrentPage(activePage);
+                }
+
+            } catch (error) {
+                console.error(error);
+                alert(`Update failed: ${error}`);
+            }
+        });
+
+        const cancelBtn = form.querySelector('.cancel-edit-btn');
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', async () => {
+                taskItem.innerHTML = taskItem.getAttribute('data-original-html');
+                taskItem.classList.remove('editing');
+            });
         }
     };
 
@@ -1272,140 +1409,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const findTask = (id) => cachedTasks.find(t => t.id === id);
 
-        const handleDeleteTask = async (id) => {
-            const taskToDelete = findTask(id);
-            if (!taskToDelete) {
-                alert("Error: Task not found in cache.");
-                return;
-            }
-
-            if (confirm(`Are you sure you want to delete this task?\n\n"${taskToDelete.title}"`)) {
-                try {
-                    await deleteTask(id);
-
-                    const taskElement = document.querySelector(`.task-list-item[data-id="${id}"]`);
-                    if (taskElement) {
-                        taskElement.remove();
-                    }
-                    cachedTasks = cachedTasks.filter(task => task.id !== id);
-
-                    alert(`Task "${taskToDelete.title}" deleted.`);
-                } catch (error) {
-                    alert(`ERROR: Failed to delete task. Details: ${error}`);
-                    await reloadCurrentPage('tasks');
-                }
-            }
-        };
-
-        const handleEditTask = async (id) => {
-            const task = findTask(id);
-            const taskItem = document.querySelector(`.task-list-item[data-id="${id}"]`);
-
-            if (taskItem.classList.contains('editing')) return;
-
-            if (task && taskItem) {
-                taskItem.setAttribute('data-original-html', taskItem.innerHTML);
-                taskItem.classList.add('editing');
-
-                // --- FORM HTML OLUŞTURUCU (İÇ FONKSİYON) ---
-                const generateEditHtml = async (taskData) => {
-                    const uniqueCategories = new Set(cachedTasks.map(t => t.category).filter(cat => cat && cat.trim() !== ''));
-                    const categoryOptions = Array.from(uniqueCategories).map(cat =>
-                        `<option value="${cat}" ${taskData.category === cat ? 'selected' : ''}>${cat}</option>`
-                    ).join('');
-
-                    const statusOptions = ['pending', 'in_progress', 'completed'].map(status => {
-                        let displayStatus = status.charAt(0).toUpperCase() + status.slice(1).replace('-', ' ');
-                        if (status === 'pending') displayStatus = 'Not Started';
-                        return `<option value="${status}" ${taskData.status === status ? 'selected' : ''}>${displayStatus}</option>`;
-                    }).join('');
-
-                    // Dosya Listesi
-                    let filesHtml = '';
-                    if (taskData.attachments && taskData.attachments.length > 0) {
-                        filesHtml = `<div style="margin:10px 0; padding:5px; background:#f0f0f0; border-radius:5px;">`;
-                        taskData.attachments.forEach(f => {
-                            filesHtml += `<div style="display:flex; justify-content:space-between; font-size:0.85em; margin-bottom:2px;">
-                                <span>${f.original_name}</span>
-                                <button type="button" onclick="window.deleteAttachmentWrapper(${f.id}, this)" style="color:red; border:none; cursor:pointer;"><i class="fas fa-trash"></i></button>
-                            </div>`;
-                        });
-                        filesHtml += `</div>`;
-                    }
-
-                    // Admin Atama Listesi
-                    let assignHtml = '';
-                    if (isAdmin()) {
-                        const users = await fetchUsers();
-                        const options = users.map(u => 
-                            `<option value="${u.id}" ${taskData.assigned_to === u.id ? 'selected' : ''}>${u.name}</option>`
-                        ).join('');
-                        assignHtml = `<div class="form-group"><label>Atanan:</label><select id="edit-assigned-${taskData.id}">${options}<option value="">Atama Yok</option></select></div>`;
-                    }
-
-                    return `
-                        <form id="task-edit-form-${taskData.id}" class="task-edit-form" style="padding:15px; background:white; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.1);">
-                            <div class="form-group"><label>Title</label><input type="text" id="edit-title-${taskData.id}" value="${taskData.title}" required></div>
-                            <div class="form-group"><label>Desc</label><textarea id="edit-description-${taskData.id}">${taskData.description || ''}</textarea></div>
-                            ${filesHtml}
-                            <div class="form-group"><label>Yeni Dosya:</label><input type="file" id="edit-files-${taskData.id}" multiple></div>
-                            ${assignHtml}
-                            <div class="form-group"><label>Status</label><select id="edit-status-${taskData.id}">${statusOptions}</select></div>
-                            <div class="task-actions" style="margin-top:10px; display:flex; gap:10px;">
-                                <button type="submit" class="save-edit-btn" style="background:green; color:white; padding:5px 10px; border:none; border-radius:4px; cursor:pointer;">Save</button>
-                                <button type="button" class="cancel-edit-btn" style="background:gray; color:white; padding:5px 10px; border:none; border-radius:4px; cursor:pointer;">Cancel</button>
-                            </div>
-                        </form>
-                    `;
-                };
-                // ---------------------------------------------
-
-                taskItem.innerHTML = await generateEditHtml(task);
-
-                const form = document.getElementById(`task-edit-form-${id}`);
-                
-                form.addEventListener('submit', async (e) => {
-                    e.preventDefault();
-                    
-                    const titleVal = document.getElementById(`edit-title-${id}`).value;
-                    const descVal = document.getElementById(`edit-description-${id}`).value;
-                    const statusVal = document.getElementById(`edit-status-${id}`).value;
-                    
-                    let assignedToVal = task.assigned_to;
-                    if (isAdmin()) {
-                        const assignInput = document.getElementById(`edit-assigned-${id}`);
-                        if (assignInput) assignedToVal = assignInput.value ? parseInt(assignInput.value) : null;
-                    }
-
-                    const payload = {
-                        title: titleVal,
-                        description: descVal,
-                        status: statusVal,
-                        assigned_to: assignedToVal
-                        // ... diğer alanlar (tarih vb.) buraya eklenebilir ...
-                    };
-
-                    try {
-                        await updateTask(id, payload);
-                        
-                        const fileInput = document.getElementById(`edit-files-${id}`);
-                        if (fileInput.files.length > 0) {
-                            await uploadTaskFiles(id, fileInput);
-                        }
-                        
-                        alert("Task updated!");
-                        await reloadCurrentPage('tasks');
-                    } catch (err) {
-                        alert("Update failed: " + err);
-                    }
-                });
-
-                form.querySelector('.cancel-edit-btn').addEventListener('click', () => {
-                    taskItem.innerHTML = taskItem.getAttribute('data-original-html');
-                    taskItem.classList.remove('editing');
-                });
-            }
-        };
+        
 
         listContainer.addEventListener('click', (e) => {
             const target = e.target.closest('button');
@@ -1496,6 +1500,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
     //download files
+
 // DOSYA TÜRÜNÜ BELİRLEME YARDIMCISI
     const getMimeType = (fileName) => {
         const extension = fileName.split('.').pop().toLowerCase();
@@ -1510,7 +1515,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return mimeTypes[extension] || 'application/octet-stream';
     };
 
-    // DÜZELTİLMİŞ İNDİRME/ÖNİZLEME FONKSİYONU
     const downloadFileWrapper = async (event, fileId, fileName) => {
         event.preventDefault();
         
@@ -1567,6 +1571,7 @@ document.addEventListener('DOMContentLoaded', () => {
             mainContent.innerHTML = await getStatisticsContent();
         }else if (pageName === 'admin') {
             mainContent.innerHTML = await getAdminPanelContent();
+            setupAdminInteractions();   
         }
         
         else {
@@ -1611,6 +1616,74 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    const setupAdminInteractions = () => {
+        const tableBody = document.getElementById('admin-table-body');
+        if (!tableBody) return;
+
+        tableBody.addEventListener('click', (e) => {
+            const target = e.target.closest('button');
+            if (!target) return;
+            
+            const taskId = parseInt(target.getAttribute('data-id'));
+            if (!taskId) return;
+
+            if (target.classList.contains('list-delete-btn')) {
+                handleDeleteTask(taskId);
+            } else if (target.classList.contains('list-edit-btn') && !target.classList.contains('save-edit-btn')) {
+                handleEditTask(taskId);
+            }
+        });
+    };
+
+    window.toggleAdminUserTasks = (userId, btnElement) => {
+        const detailRow = document.getElementById(`detail-row-${userId}`);
+        const userRow = document.getElementById(`user-row-${userId}`);
+        const container = document.getElementById(`task-container-${userId}`);
+        const icon = btnElement.querySelector('i');
+
+        const isHidden = detailRow.classList.contains('hidden');
+        
+        if (isHidden) {
+            detailRow.classList.remove('hidden');
+            userRow.classList.add('row-open'); 
+            icon.classList.remove('fa-chevron-down');
+            icon.classList.add('fa-chevron-up');
+            btnElement.innerHTML = `<i class="fas fa-chevron-up"></i> Kapat`;
+            btnElement.style.backgroundColor = "#dc3545";
+
+            const userTasks = cachedTasks.filter(t => t.user_id === userId || t.assigned_to === userId);
+
+            if (userTasks.length === 0) {
+                container.innerHTML = '<p style="text-align:center; padding:10px;">Bu kullanıcıya ait görev bulunamadı.</p>';
+            } else {
+                container.innerHTML = sortTasksByUser(userTasks).map(renderTaskRow).join('');
+            }
+
+        } else {
+            detailRow.classList.add('hidden');
+            userRow.classList.remove('row-open');
+            icon.classList.remove('fa-chevron-up');
+            icon.classList.add('fa-chevron-down');
+            btnElement.innerHTML = `<i class="fas fa-chevron-down"></i> Görevleri Aç`;
+            btnElement.style.backgroundColor = "var(--primary-color)"; // Eski rengine dön
+        }
+    };
+
+    window.openAdminUserTasks = (userId, userName) => {
+        document.getElementById('admin-users-view').style.display = 'none';
+        document.getElementById('admin-tasks-view').style.display = 'block';
+        document.getElementById('admin-tasks-title').innerText = `${userName} - Görev Listesi`;
+
+        const userTasks = cachedTasks.filter(t => t.user_id === userId || t.assigned_to === userId);
+
+        const listContainer = document.getElementById('admin-task-list-container');
+        
+        if (userTasks.length === 0) {
+            listContainer.innerHTML = '<p>Bu kullanıcıya ait görev bulunamadı.</p>';
+        } else {
+            listContainer.innerHTML = sortTasksByUser(userTasks).map(renderTaskRow).join('');
+        }
+    };
 
     checkAndClearExpiredToken();
     updateAdminUI();
