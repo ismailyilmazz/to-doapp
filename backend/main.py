@@ -17,7 +17,7 @@ origins= [
     "http://localhost",
     "http://localhost:5500",
     "http://127.0.0.1:5500",
-    
+    "https://to-doappclient.onrender.com",
 ]
 
 app.add_middleware(
