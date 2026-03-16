@@ -2,7 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const navItems = document.querySelectorAll('.nav-item');
     const mainContent = document.querySelector('.content');
 
-    const API_BASE_URL = 'http://127.0.0.1:8000/api';
+    const API_BASE_URL = 'https://to-do-backend-j7uj.onrender.com/api';
     const MAX_CATEGORY_LENGTH = 25;
     const MAX_TITLE_LENGTH = 20;
     const MAX_DESCRIPTION_LENGTH = 250;
